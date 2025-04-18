@@ -1,0 +1,102 @@
+<resources>
+    <string name="app_name">FocusGuard: App Blocker</string>
+    
+    <!-- Device admin strings -->
+    <string name="device_admin_description">Enables app blocking protection and prevents uninstallation</string>
+    <string name="device_admin_label">App Blocker Device Admin</string>
+    
+    <!-- Notification channel strings -->
+    <string name="notification_channel_name">Task Reminders</string>
+    <string name="notification_channel_description">Notifications for scheduled tasks</string>
+    
+    <!-- Permission descriptions -->
+    <string name="permission_usage_stats">This app needs usage stats permission to monitor and block apps based on your configured schedule.</string>
+    <string name="accessibility_service_description">This helps the app monitor and block specific content within social media apps, such as Instagram Reels or YouTube Shorts. This is required for granular content blocking functionality.</string>
+    <string name="permission_notification">This app needs notification permission to show notifications for blocked apps and other important events.</string>
+    <string name="permission_overlay">This app needs overlay permission to display blocking screens over apps that are being blocked.</string>
+    <string name="channel_app_blocker">App Blocker</string>
+    <string name="channel_app_blocker_description">Notifications about app blocking events</string>
+    <string name="app_icon">App Icon</string>
+    
+    <!-- Social Media Tab -->
+    <string name="tab_social_media">Social Media Control</string>
+    <string name="social_media_description">Block specific features of social media apps</string>
+    
+    <!-- YouTube Features -->
+    <string name="youtube">YouTube</string>
+    <string name="youtube_shorts">Shorts</string>
+    <string name="youtube_search">Search</string>
+    <string name="youtube_pip">Picture-in-Picture</string>
+    
+    <!-- Instagram Features -->
+    <string name="instagram">Instagram</string>
+    <string name="instagram_stories">Stories</string>
+    <string name="instagram_reels">Reels</string>
+    <string name="instagram_explore">Explore Tab</string>
+    
+    <!-- Facebook Features -->
+    <string name="facebook">Facebook</string>
+    <string name="facebook_stories">Stories</string>
+    <string name="facebook_reels">Reels</string>
+    
+    <!-- Snapchat Features -->
+    <string name="snapchat">Snapchat</string>
+    <string name="snapchat_spotlight">Spotlight</string>
+    
+    <!-- X (Twitter) Features -->
+    <string name="x_twitter">X (Twitter)</string>
+    <string name="x_explore">Explore Tab</string>
+    
+    <!-- TikTok Features -->
+    <string name="tiktok">TikTok</string>
+    <string name="tiktok_search">Search</string>
+    <string name="tiktok_comments">Comments</string>
+    
+    <!-- Usage Statistics -->
+    <string name="tab_usage_stats">Usage Stats</string>
+    <string name="usage_stats_description">Monitor your app usage and screen time</string>
+    <string name="today">Today</string>
+    <string name="week">This Week</string>
+    <string name="month">This Month</string>
+    <string name="total_usage">Total Usage:</string>
+    <string name="most_used_apps">Most Used Apps</string>
+    <string name="usage_hours">%1$d h %2$d min</string>
+    <string name="usage_minutes">%1$d min</string>
+    
+    <!-- User Habits -->
+    <string name="add_habit">Add Habit</string>
+    <string name="add_habit_title">Add New Habit</string>
+    <string name="habit_name">Habit Name</string>
+    <string name="habit_description">Description (optional)</string>
+    <string name="is_distracting_habit">Is this a distracting habit?</string>
+    <string name="distracting_habit_explanation">Distracting habits are ones you want to reduce or eliminate.</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete_habit">Delete Habit</string>
+    <string name="habit_added">Habit added successfully</string>
+    <string name="habit_name_required">Habit name is required</string>
+    <string name="empty_habits_list">No habits added yet</string>
+    <string name="empty_habits_message">No Habits Added Yet</string>
+    <string name="empty_habits_description">Add habits you want to track or change to receive personalized insights and reminders.</string>
+    <string name="add_first_habit">Add First Habit</string>
+    
+    <!-- Notification related strings -->
+    <string name="notification_insights_title">Insights</string>
+    <string name="notification_settings">Notification Settings</string>
+    <string name="enable_notifications">Enable Notifications</string>
+    <string name="religious_quotes">Religious Quotes</string>
+    <string name="motivational_content">Motivational Content</string>
+    <string name="habit_reminders">Habit Reminders</string>
+    <string name="personalized_insights">Personalized Insights</string>
+    <string name="morning_notifications">Morning Notifications</string>
+    <string name="evening_notifications">Evening Notifications</string>
+    <string name="notification_frequency">Notification Frequency</string>
+    <string name="set_time">Set Time</string>
+    
+    <!-- Settings Tab -->
+    <string name="tab_settings">Settings</string>
+    
+    <!-- App Blocker Service Description -->
+    <string name="app_blocker_service_description">Blocks apps based on your time schedule settings, limiting access during scheduled times.</string>
+    <string name="app_blocker_accessibility_service_name">FocusGuard: App Blocker</string>
+</resources>

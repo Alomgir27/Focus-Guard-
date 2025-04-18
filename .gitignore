@@ -1,0 +1,109 @@
+# Compiled files
+*.class
+*.o
+*.so
+*.dll
+*.exe
+*.out
+
+# Package files
+*.jar
+*.war
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Logs and databases
+*.log
+log/
+logs/
+*.sqlite
+*.db
+*.sql
+*.sqlite3
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor folders
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnp/
+.pnp.js
+.npm
+.yarn/
+
+# Build directories
+dist/
+build/
+out/
+target/
+
+# Kotlin/Java specific
+*.iml
+.gradle/
+.gradle
+build/
+local.properties
+
+# Android specific
+*.apk
+*.aab
+*.ap_
+*.dex
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/captures
+.externalNativeBuild
+.cxx
+/app/release
+/app/debug
+
+# Coverage reports
+/coverage/
+.coverage
+htmlcov/
+.nyc_output/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Miscellaneous
+*.bak
+*.tmp
+*.temp
+.cache/
+tmp/
+temp/ 

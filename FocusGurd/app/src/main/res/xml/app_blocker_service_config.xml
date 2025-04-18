@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 
+  DEPRECATED: This configuration file is no longer used.
+  The active configuration is in accessibility_service_config.xml.
+  Keeping this file for reference only.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagIncludeNotImportantViews|flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/app_blocker_service_description"
+    android:notificationTimeout="100"
+    android:canPerformGestures="true"
+    android:canRequestFilterKeyEvents="true"
+    android:settingsActivity="com.focusguard.app.MainActivity" /> 

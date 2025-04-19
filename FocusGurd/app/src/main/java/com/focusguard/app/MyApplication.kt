@@ -16,16 +16,20 @@ import androidx.work.WorkManager
 import com.focusguard.app.data.AppDatabase
 import com.focusguard.app.data.repository.AppBlockingRepository
 import com.focusguard.app.data.repository.AppBlockRepository
+import com.focusguard.app.data.repository.DailyRoutineRepository
 import com.focusguard.app.data.repository.NotificationRepository
 import com.focusguard.app.data.repository.TaskRepository
 import com.focusguard.app.data.repository.UserHabitRepository
 import com.focusguard.app.data.repository.UserInsightRepository
+import com.focusguard.app.data.repository.UserInstructionRepository
 import com.focusguard.app.services.NotificationService
 import com.focusguard.app.util.ApiKeyManager
 import com.focusguard.app.util.NotificationCacheManager
 import com.focusguard.app.util.NotificationGenerator
 import com.focusguard.app.util.NotificationScheduler
 import com.focusguard.app.util.NotificationUtils
+import com.focusguard.app.util.RoutineGenerator
+import com.focusguard.app.util.RoutineScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -40,14 +44,6 @@ class MyApplication : Application(), Configuration.Provider {
     companion object {
         private const val TAG = "FocusGuardApp"
         
-        // Define migration from version 1 to 2
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Example migration if needed
-                // database.execSQL("CREATE TABLE IF NOT EXISTS `new_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL)")
-            }
-        }
-        
         // Reference to application instance
         private lateinit var instance: MyApplication
         
@@ -60,7 +56,7 @@ class MyApplication : Application(), Configuration.Provider {
                     AppDatabase::class.java,
                     "focusguard-db"
                 )
-                .addMigrations(MIGRATION_1_2)
+                // Remove all migrations since we're starting fresh with version 1
                 .fallbackToDestructiveMigration()
                 .build()
             } catch (e: Exception) {
@@ -111,18 +107,62 @@ class MyApplication : Application(), Configuration.Provider {
             }
         }
         
+        val taskRepository: TaskRepository by lazy {
+            try {
+                Log.d(TAG, "Initializing taskRepository")
+                TaskRepository(database.taskDao())
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing taskRepository: ${e.message}", e)
+                throw e
+            }
+        }
+        
+        val dailyRoutineRepository: DailyRoutineRepository by lazy {
+            try {
+                Log.d(TAG, "Initializing dailyRoutineRepository")
+                DailyRoutineRepository(database.dailyRoutineDao())
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing dailyRoutineRepository: ${e.message}", e)
+                throw e
+            }
+        }
+        
+        val userInstructionRepository: UserInstructionRepository by lazy {
+            try {
+                Log.d(TAG, "Initializing userInstructionRepository")
+                UserInstructionRepository(database.userInstructionPreferenceDao())
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing userInstructionRepository: ${e.message}", e)
+                throw e
+            }
+        }
+        
+        // Routine generator
+        val routineGenerator: RoutineGenerator by lazy {
+            try {
+                Log.d(TAG, "Initializing routineGenerator")
+                RoutineGenerator(instance.applicationContext, dailyRoutineRepository, taskRepository, userInstructionRepository)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing routineGenerator: ${e.message}", e)
+                throw e
+            }
+        }
+        
         // Notification channels
         const val CHANNEL_ID_GENERAL = "channel_general"
+        const val CHANNEL_ID_ROUTINE = "channel_routine"
         
         private lateinit var aiPreferencesQueue: AiPreferencesQueue
         
         // Our new components
         private lateinit var notificationCacheManager: NotificationCacheManager
         private lateinit var apiKeyManager: ApiKeyManager
+        private lateinit var routineScheduler: RoutineScheduler
         
         fun getAiPreferencesQueue(): AiPreferencesQueue = aiPreferencesQueue
         fun getNotificationCacheManager(): NotificationCacheManager = notificationCacheManager
         fun getApiKeyManager(): ApiKeyManager = apiKeyManager
+        fun getRoutineScheduler(): RoutineScheduler = routineScheduler
     }
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -179,6 +219,9 @@ class MyApplication : Application(), Configuration.Provider {
             // Initialize notification scheduler
             notificationScheduler = NotificationScheduler(this)
             
+            // Initialize routine scheduler
+            routineScheduler = RoutineScheduler(this)
+            
             // Apply UI safety measures
             applySafetyMeasures()
             
@@ -192,6 +235,9 @@ class MyApplication : Application(), Configuration.Provider {
                     
                     // Schedule notifications after database is initialized
                     notificationScheduler.scheduleAllNotifications()
+                    
+                    // Schedule daily routine generation
+                    routineScheduler.scheduleDailyRoutineGeneration()
                     
                     // Pre-generate offline content if enabled
                     preGenerateOfflineContentIfEnabled()
@@ -296,6 +342,14 @@ class MyApplication : Application(), Configuration.Provider {
                 description = "General notifications from the app"
             }
             
+            val routineChannel = NotificationChannel(
+                CHANNEL_ID_ROUTINE,
+                "Daily Routine",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Your daily routine and schedule reminders"
+            }
+            
             // Register all channels
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(taskChannel)
@@ -305,6 +359,7 @@ class MyApplication : Application(), Configuration.Provider {
             notificationManager.createNotificationChannel(religiousChannel)
             notificationManager.createNotificationChannel(insightsChannel)
             notificationManager.createNotificationChannel(generalChannel)
+            notificationManager.createNotificationChannel(routineChannel)
         }
     }
 

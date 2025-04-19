@@ -12,10 +12,9 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
-import android.view.accessibility.AccessibilityManager
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /**
  * Splash screen activity that displays the app logo
@@ -28,9 +27,10 @@ class SplashActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "SplashActivity"
         private const val PREF_FILE = "app_permissions"
-        private const val PREF_FIRST_LAUNCH = "first_launch"
+        private const val PREF_ACCESSIBILITY_PERMISSION_RESPONDED = "accessibility_permission_responded"
         private const val ACCESSIBILITY_REMINDER_NOTIFICATION_ID = 10001
         private const val ACCESSIBILITY_REMINDER_CHANNEL_ID = "accessibility_reminder_channel"
+        private const val SPLASH_DISPLAY_TIME = 1000L // 1 second
     }
     
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -40,21 +40,79 @@ class SplashActivity : AppCompatActivity() {
         // Initialize SharedPreferences
         prefs = getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
         
-        // Check if this is the first launch
-        val isFirstLaunch = prefs.getBoolean(PREF_FIRST_LAUNCH, true)
+        // Create notification channel for accessibility reminders
+        createAccessibilityReminderChannel()
         
-        if (isFirstLaunch) {
-            // Mark that the app has been launched
-            prefs.edit().putBoolean(PREF_FIRST_LAUNCH, false).apply()
-            
-            // Create notification channel for accessibility reminders (for Android O+)
-            createAccessibilityReminderChannel()
-            
-            // Show the accessibility permission dialog
-            showAccessibilityPermissionDialog()
+        // Always check accessibility permission status on app start
+        checkAccessibilityPermission()
+    }
+    
+    private fun checkAccessibilityPermission() {
+        val isAccessibilityEnabled = isAccessibilityServiceEnabled()
+        
+        // Detailed logging to help diagnose permission flow
+        Log.d(TAG, "Splash - Accessibility enabled: $isAccessibilityEnabled")
+        
+        if (isAccessibilityEnabled) {
+            // Permission is enabled, update preferences and proceed to main activity
+            Log.d(TAG, "Accessibility service is enabled, proceeding to MainActivity")
+            prefs.edit()
+                .putBoolean(PREF_ACCESSIBILITY_PERMISSION_RESPONDED, true)
+                .putBoolean("accessibility_verified", true)
+                .apply()
+                
+            // Proceed to main activity after short delay
+            proceedToMainActivity(SPLASH_DISPLAY_TIME)
         } else {
-            // Not first launch, proceed to main activity after delay
-            proceedToMainActivity()
+            // If accessibility is not enabled, always open the permission activity
+            Log.d(TAG, "Accessibility not enabled, going to AccessibilityPermissionActivity")
+            
+            // Launch the dedicated accessibility permission activity
+            val intent = Intent(this, AccessibilityPermissionActivity::class.java)
+            startActivity(intent)
+            finish() // End this activity
+        }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        
+        // When we resume, check if accessibility is now enabled
+        if (isAccessibilityServiceEnabled()) {
+            Log.d(TAG, "Splash onResume - Accessibility enabled, proceeding to MainActivity")
+            prefs.edit().putBoolean("accessibility_verified", true).apply()
+            proceedToMainActivity(300) // Short delay before proceeding to main
+        }
+    }
+    
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        try {
+            val accessibilityEnabled = try {
+                Settings.Secure.getInt(
+                    contentResolver,
+                    Settings.Secure.ACCESSIBILITY_ENABLED
+                )
+            } catch (e: Settings.SettingNotFoundException) {
+                0
+            }
+            
+            if (accessibilityEnabled == 1) {
+                val services = Settings.Secure.getString(
+                    contentResolver,
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                )
+                services?.let {
+                    val serviceMatch = "${packageName}/${packageName}.services.AppBlockerAccessibilityService"
+                    val isEnabled = it.contains(serviceMatch)
+                    Log.d(TAG, "Accessibility check: enabled=$isEnabled, services=$services, looking for=$serviceMatch")
+                    return isEnabled
+                }
+            }
+            Log.d(TAG, "Accessibility not enabled in system")
+            return false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking accessibility service: ${e.message}", e)
+            return false
         }
     }
     
@@ -78,115 +136,11 @@ class SplashActivity : AppCompatActivity() {
         }
     }
     
-    private fun showAccessibilityPermissionDialog() {
-        Log.d(TAG, "Showing accessibility permission dialog on first launch")
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Accessibility Permission Required")
-            .setMessage("FocusGuard requires accessibility service to block distracting apps. Would you like to enable it now?")
-            .setCancelable(false)
-            .setPositiveButton("Enable Now") { _, _ ->
-                // Open accessibility settings
-                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                startActivity(intent)
-                
-                // Show a toast with instructions
-                android.widget.Toast.makeText(
-                    this, 
-                    "Find and enable 'FocusGuard: App Blocker' in the list", 
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                
-                // Mark this permission as having been asked for
-                prefs.edit().putLong("accessibility_asked", System.currentTimeMillis()).apply()
-                
-                // Proceed to main activity
-                proceedToMainActivity()
-            }
-            .setNegativeButton("Later") { _, _ ->
-                // Mark this permission as having been asked for
-                prefs.edit().putLong("accessibility_asked", System.currentTimeMillis()).apply()
-                
-                // Show notification to remind user
-                showAccessibilityReminderNotification()
-                
-                // Proceed to main activity
-                proceedToMainActivity()
-            }
-            .show()
-    }
-    
-    private fun showAccessibilityReminderNotification() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        val pendingIntent = PendingIntent.getActivity(
-            this,
-            0,
-            intent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        )
-        
-        val builder = NotificationCompat.Builder(this, ACCESSIBILITY_REMINDER_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Accessibility Permission Required")
-            .setContentText("FocusGuard needs accessibility permission to function properly")
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-        
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(ACCESSIBILITY_REMINDER_NOTIFICATION_ID, builder.build())
-    }
-    
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        try {
-            val accessibilityEnabled = try {
-                Settings.Secure.getInt(
-                    contentResolver,
-                    Settings.Secure.ACCESSIBILITY_ENABLED
-                )
-            } catch (e: Settings.SettingNotFoundException) {
-                0
-            }
-            
-            if (accessibilityEnabled == 1) {
-                val services = Settings.Secure.getString(
-                    contentResolver,
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-                )
-                services?.let {
-                    return it.contains("${packageName}/${packageName}.services.AppBlockerAccessibilityService")
-                }
-            }
-            return false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking accessibility service: ${e.message}", e)
-            return false
-        }
-    }
-    
-    private fun proceedToMainActivity() {
-        // Use a handler to delay loading the main activity
+    private fun proceedToMainActivity(delayMillis: Long = 0) {
         Handler(Looper.getMainLooper()).postDelayed({
-            // Start the main activity
             val intent = Intent(this, MainActivity::class.java)
             startActivity(intent)
-            
-            // Close this activity
             finish()
-        }, 1500) // 1.5 seconds delay
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        
-        // Check if accessibility permission has been granted
-        if (isAccessibilityServiceEnabled()) {
-            // Mark as verified
-            prefs.edit().putBoolean("accessibility_verified", true).apply()
-            
-            // Cancel any pending accessibility reminder notifications
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.cancel(ACCESSIBILITY_REMINDER_NOTIFICATION_ID)
-        }
+        }, delayMillis)
     }
 } 

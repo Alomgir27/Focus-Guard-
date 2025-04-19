@@ -132,4 +132,70 @@ class OpenAIClient {
         // If we've exhausted retries, return the last exception
         Result.failure(lastException ?: Exception("Failed after $MAX_RETRIES retries"))
     }
+    
+    /**
+     * Create a chat completion with a custom request object
+     */
+    suspend fun createChatCompletion(
+        apiKey: String,
+        request: ChatCompletionRequest
+    ): Result<String> = withContext(Dispatchers.IO) {
+        var currentRetry = 0
+        var lastException: Exception? = null
+        
+        while (currentRetry < MAX_RETRIES) {
+            try {
+                if (currentRetry > 0) {
+                    Log.d(TAG, "Retry attempt $currentRetry for OpenAI API call")
+                    
+                    // Calculate exponential backoff time with jitter
+                    val backoffTime = (INITIAL_BACKOFF_MS * 2.0.pow(currentRetry - 1)).toLong()
+                    val jitteredBackoff = (backoffTime * (0.5 + Math.random() * 0.5)).toLong()
+                    val delayTime = jitteredBackoff.coerceAtMost(MAX_BACKOFF_MS)
+                    
+                    Log.d(TAG, "Waiting for $delayTime ms before retry")
+                    delay(delayTime)
+                }
+                
+                Log.d(TAG, "Creating chat completion with custom request")
+                
+                val response = openAIService.createChatCompletion("Bearer $apiKey", request)
+                
+                if (response.isSuccessful) {
+                    val responseBody = response.body()
+                    if (responseBody != null && responseBody.choices.isNotEmpty()) {
+                        val generatedText = responseBody.choices[0].message.content.trim()
+                        Log.d(TAG, "Generated content successfully")
+                        return@withContext Result.success(generatedText)
+                    } else {
+                        Log.e(TAG, "Empty response from OpenAI")
+                        lastException = Exception("Empty response from OpenAI")
+                    }
+                } else {
+                    val errorCode = response.code()
+                    val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                    val errorMessage = "Error: $errorCode - $errorBody"
+                    Log.e(TAG, errorMessage)
+                    
+                    // Only retry on specific error codes that are likely to be temporary
+                    if (errorCode == 429 || errorCode >= 500) {
+                        lastException = Exception(errorMessage)
+                        currentRetry++
+                        continue
+                    } else {
+                        // Don't retry on client errors (except rate limits)
+                        return@withContext Result.failure(Exception(errorMessage))
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error generating content", e)
+                lastException = e
+            }
+            
+            currentRetry++
+        }
+        
+        // If we've exhausted retries, return the last exception
+        Result.failure(lastException ?: Exception("Failed after $MAX_RETRIES retries"))
+    }
 } 

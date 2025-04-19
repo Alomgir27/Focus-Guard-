@@ -71,10 +71,15 @@ class NotificationHistoryFragment : Fragment() {
     }
     
     private fun setupRecyclerView() {
-        notificationAdapter = NotificationAdapter { notification ->
-            markNotificationAsRead(notification)
-            showNotificationDetailDialog(notification)
-        }
+        notificationAdapter = NotificationAdapter(
+            onItemClick = { notification ->
+                markNotificationAsRead(notification)
+                showNotificationDetailDialog(notification)
+            },
+            onDeleteClick = { notification ->
+                showDeleteConfirmationDialog(notification)
+            }
+        )
         
         binding.recyclerViewNotifications.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -90,6 +95,41 @@ class NotificationHistoryFragment : Fragment() {
                 // Refresh data after marking as read
                 loadNotifications()
             }
+        }
+    }
+    
+    private fun showDeleteConfirmationDialog(notification: Notification) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Delete Notification")
+            .setMessage("Are you sure you want to delete this notification?")
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setPositiveButton("Delete") { _, _ ->
+                deleteNotification(notification)
+            }
+            .show()
+    }
+    
+    private fun deleteNotification(notification: Notification) {
+        lifecycleScope.launch {
+            // Delete from database
+            notificationRepository.deleteNotification(notification)
+            
+            // If this notification has a pending system notification, cancel it
+            notification.id.let { notificationId ->
+                notificationService.cancelNotification(notificationId.toInt())
+            }
+            
+            // Refresh the UI
+            loadNotifications()
+            
+            // Show confirmation
+            Snackbar.make(
+                binding.root,
+                "Notification deleted",
+                Snackbar.LENGTH_SHORT
+            ).show()
         }
     }
     
@@ -231,7 +271,10 @@ class NotificationHistoryFragment : Fragment() {
     
     private fun clearAllNotifications() {
         lifecycleScope.launch {
+            // Permanently delete from database
             notificationRepository.deleteAllNotifications()
+            
+            // Cancel all system notifications
             notificationService.cancelAllNotifications()
             
             // Load notifications to update UI

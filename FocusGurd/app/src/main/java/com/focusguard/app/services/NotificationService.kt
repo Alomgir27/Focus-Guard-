@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import java.util.Queue
 import java.util.LinkedList
 import java.util.concurrent.ConcurrentLinkedQueue
+import android.widget.RemoteViews
 
 class NotificationService(private val context: Context) {
     
@@ -251,6 +252,12 @@ class NotificationService(private val context: Context) {
         // Optimize content only for the system notification display
         val optimizedContent = optimizeNotificationContent(notification)
         
+        // Create custom remote view for the notification with logo
+        val customView = RemoteViews(context.packageName, R.layout.custom_notification_layout)
+        customView.setTextViewText(R.id.textViewNotificationTitle, notification.title)
+        customView.setTextViewText(R.id.textViewNotificationContent, optimizedContent)
+        customView.setImageViewResource(R.id.imageViewNotificationLogo, R.drawable.logo)
+        
         // Create notification builder with optimized content
         val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
@@ -262,6 +269,9 @@ class NotificationService(private val context: Context) {
             .setAutoCancel(true)
             .setGroup(GROUP_KEY_NOTIFICATIONS)
             .setCategory(getCategoryForType(notification.type))
+            .setCustomBigContentView(customView)
+            // Add a View button to the notification
+            .addAction(android.R.drawable.ic_menu_view, "View", pendingIntent)
         
         // Add sound for pre-Oreo devices
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -297,6 +307,16 @@ class NotificationService(private val context: Context) {
      */
     private fun showSummaryNotification() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            // Create an intent to launch the main activity
+            val intent = Intent(context, com.focusguard.app.MainActivity::class.java)
+            intent.putExtra("open_notification_history", true)
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_IMMUTABLE
+            )
+            
             val summaryNotification = NotificationCompat.Builder(context, CHANNEL_GENERAL)
                 .setContentTitle("New Notifications")
                 .setContentText("You have new notifications")
@@ -304,6 +324,9 @@ class NotificationService(private val context: Context) {
                 .setGroup(GROUP_KEY_NOTIFICATIONS)
                 .setGroupSummary(true)
                 .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                // Add a View button that opens notification history
+                .addAction(android.R.drawable.ic_menu_view, "View All", pendingIntent)
                 .build()
             
             notificationManager.notify(9999, summaryNotification)

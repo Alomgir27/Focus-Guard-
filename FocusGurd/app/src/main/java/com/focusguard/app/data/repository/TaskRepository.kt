@@ -3,6 +3,7 @@ package com.focusguard.app.data.repository
 import androidx.lifecycle.LiveData
 import com.focusguard.app.data.dao.TaskDao
 import com.focusguard.app.data.entity.Task
+import java.time.LocalDate
 
 class TaskRepository(private val taskDao: TaskDao) {
     
@@ -28,5 +29,16 @@ class TaskRepository(private val taskDao: TaskDao) {
     
     suspend fun setTaskCompleted(taskId: Int, isCompleted: Boolean) {
         taskDao.updateTaskCompletionStatus(taskId, isCompleted)
+    }
+    
+    suspend fun getActiveTasksSync(): List<Task> {
+        return taskDao.getActiveTasksSync()
+    }
+    
+    suspend fun getTasksForDate(date: LocalDate): List<Task> {
+        // Get active tasks and filter by date
+        return getActiveTasksSync().filter { task ->
+            task.dueDate.toLocalDate() == date
+        }
     }
 } 

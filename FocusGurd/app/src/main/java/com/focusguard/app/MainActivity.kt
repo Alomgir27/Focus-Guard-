@@ -69,6 +69,7 @@ class MainActivity : BaseActivity() {
         private const val PREF_FILE = "app_permissions"
         private const val PREF_USAGE_STATS_ASKED = "usage_stats_asked"
         private const val PREF_ACCESSIBILITY_ASKED = "accessibility_asked"
+        private const val PREF_ACCESSIBILITY_PERMISSION_RESPONDED = "accessibility_permission_responded"
         private const val PREF_DEVICE_ADMIN_ASKED = "device_admin_asked"
         private const val PREF_OVERLAY_ASKED = "overlay_asked"
         private const val PREF_NOTIFICATION_ASKED = "notification_asked"
@@ -111,31 +112,11 @@ class MainActivity : BaseActivity() {
                 binding.bottomNavigation.selectedItemId = R.id.navigation_apps
             }
             
-            // Force check for accessibility service first - this is critical for app blocking
-            if (!prefs.getBoolean("accessibility_verified", false) && !isAccessibilityServiceEnabled()) {
-                Log.d(TAG, "Accessibility service is NOT enabled - prompting user")
-                MaterialAlertDialogBuilder(this)
-                    .setTitle("App Blocking Not Working")
-                    .setMessage("The accessibility service is required for app blocking to work. You must enable it in Settings.")
-                    .setCancelable(false)
-                    .setPositiveButton("Enable Now") { _, _ ->
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        Toast.makeText(
-                            this, 
-                            "Find and enable 'FocusGuard: App Blocker' in the list", 
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                    .show()
-            } else {
-                Log.d(TAG, "Accessibility service is enabled or verified")
-                // Mark as verified if it's enabled but not yet verified
-                if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
-                    prefs.edit().putBoolean("accessibility_verified", true).apply()
-                }
-                // Check for other required permissions only after accessibility is confirmed
-                checkRequiredPermissions()
-            }
+            // The accessibility service check is now streamlined and unified
+            // No complex dialogs - a quick check and notification is sufficient
+            
+            // Check for other required permissions (not accessibility which is handled in SplashActivity)
+            checkOtherPermissions()
             
             // Check if we were opened from a notification
             handleNotificationIntent(intent)
@@ -195,6 +176,7 @@ class MainActivity : BaseActivity() {
             binding.bottomNavigation.setOnItemSelectedListener { item ->
                 when (item.itemId) {
                     R.id.navigation_apps -> navController.navigate(R.id.appsFragment)
+                    R.id.navigation_routine -> navController.navigate(R.id.dailyRoutineFragment)
                     R.id.navigation_usage_stats -> navController.navigate(R.id.usageStatsFragment)
                     R.id.navigation_settings -> navController.navigate(R.id.notificationSettingsFragment)
                     else -> return@setOnItemSelectedListener false
@@ -207,6 +189,7 @@ class MainActivity : BaseActivity() {
             binding.bottomNavigation.setOnItemSelectedListener { item ->
                 when (item.itemId) {
                     R.id.navigation_apps -> safelyLoadFragment(AppsFragment())
+                    R.id.navigation_routine -> safelyLoadFragment(com.focusguard.app.fragments.DailyRoutineFragment())
                     R.id.navigation_usage_stats -> safelyLoadFragment(UsageStatsFragment())
                     R.id.navigation_settings -> safelyLoadFragment(NotificationSettingsFragment())
                     else -> return@setOnItemSelectedListener false
@@ -225,46 +208,6 @@ class MainActivity : BaseActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Error loading fragment: ${e.message}", e)
             false
-        }
-    }
-    
-    private fun checkRequiredPermissions() {
-        try {
-            // Check for Accessibility Service first (most important for app blocking)
-            // Only show the dialog if accessibility is not verified and is not enabled
-            if (prefs.getBoolean("accessibility_verified", false) || isAccessibilityServiceEnabled()) {
-                // Mark as verified if it's enabled but not yet marked as verified
-                if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
-                    prefs.edit().putBoolean("accessibility_verified", true).apply()
-                }
-                
-                // Check other permissions if accessibility is granted
-                checkOtherPermissions()
-                return // Skip showing accessibility dialog
-            }
-            
-            // Only show dialog if permission not granted and we haven't asked recently
-            // This check prevents showing the dialog if already shown in SplashActivity
-            if (!hasBeenAskedRecently(PREF_ACCESSIBILITY_ASKED)) {
-                showAccessibilityPermissionDialog()
-                return // Don't check other permissions until this one is handled
-            } else {
-                // If we asked recently (likely in SplashActivity), check if it's been more than a day
-                val lastAsked = prefs.getLong(PREF_ACCESSIBILITY_ASKED, 0)
-                val now = System.currentTimeMillis()
-                val hoursDiff = (now - lastAsked) / (1000 * 60 * 60) // Convert to hours
-                
-                // Only show again if it's been more than 24 hours since last asked
-                if (hoursDiff >= 24) {
-                    showAccessibilityPermissionDialog()
-                    return // Don't check other permissions until this one is handled
-                }
-            }
-            
-            // Check other permissions if accessibility dialog was skipped
-            checkOtherPermissions()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking permissions: ${e.message}", e)
         }
     }
     
@@ -450,126 +393,74 @@ class MainActivity : BaseActivity() {
     }
     
     private fun checkPermissionsAfterReturn() {
-        // Check if accessibility service is now enabled
-        if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
-            // Mark as verified since it's now enabled
-            prefs.edit().putBoolean("accessibility_verified", true).apply()
-            
-            // Show a confirmation dialog to inform the user that the permission was granted successfully
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Permission Granted")
-                .setMessage("Accessibility permission was granted successfully! FocusGuard can now block distracting apps.")
-                .setPositiveButton("Great!") { _, _ -> }
-                .show()
-            
-            Log.d(TAG, "Accessibility permission has been granted successfully")
-        } else if (!isAccessibilityServiceEnabled() && prefs.getBoolean("accessibility_verified", false)) {
+        // Check if accessibility service is now revoked (simple quick check)
+        if (!isAccessibilityServiceEnabled() && prefs.getBoolean("accessibility_verified", false)) {
             // The permission was previously granted but now revoked
             prefs.edit().putBoolean("accessibility_verified", false).apply()
             
-            // Show warning that the permission was revoked
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Permission Revoked")
-                .setMessage("Accessibility permission was revoked. FocusGuard cannot block apps without this permission.")
-                .setCancelable(false)
-                .setPositiveButton("Enable Again") { _, _ ->
-                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    Toast.makeText(
-                        this, 
-                        "Find and enable 'FocusGuard: App Blocker' in the list", 
-                        Toast.LENGTH_LONG
-                    ).show()
-                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
-                }
-                .setNegativeButton("Later") { _, _ -> 
-                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
-                }
-                .show()
+            // Record that we asked about the permission
+            markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
+            
+            // Only show the toast if we weren't just returning from accessibility settings
+            // This prevents the annoying immediate toast when app first launches
+            val currentTime = System.currentTimeMillis()
+            val lastAccessibilitySettingsTime = prefs.getLong("last_accessibility_settings_time", 0)
+            
+            // Increased time threshold from 3 seconds to 10 seconds to prevent premature notifications
+            Log.d(TAG, "Time since last settings access: ${currentTime - lastAccessibilitySettingsTime}ms")
+            if (currentTime - lastAccessibilitySettingsTime > 10000) {
+                // Just show a toast as a gentle reminder instead of interrupting with a dialog
+                Toast.makeText(
+                    this,
+                    "Accessibility permission was revoked. App blocking won't work.",
+                    Toast.LENGTH_LONG
+                ).show()
+                
+                // Show a more detailed dialog to guide user to re-enable permissions
+                showAccessibilityPermissionDialog()
+            }
+        } else if (isAccessibilityServiceEnabled() && !prefs.getBoolean("accessibility_verified", false)) {
+            // Permission was just granted - update the flag and show a short toast
+            prefs.edit().putBoolean("accessibility_verified", true).apply()
+            Toast.makeText(this, "App blocking is now active", Toast.LENGTH_SHORT).show()
         }
         
         // Check if overlay permission is now enabled
         if (!prefs.getBoolean("overlay_verified", false) && Settings.canDrawOverlays(this)) {
             prefs.edit().putBoolean("overlay_verified", true).apply()
-            Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
         }
         
-        // Check if usage stats permission is now enabled
+        // Check for usage stats permission
         if (!prefs.getBoolean("usage_stats_verified", false) && hasUsageStatsPermission()) {
             prefs.edit().putBoolean("usage_stats_verified", true).apply()
-            Toast.makeText(this, "Usage stats permission granted!", Toast.LENGTH_SHORT).show()
         }
     }
-
-    private fun hasBeenAskedRecently(prefKey: String): Boolean {
-        val lastAsked = prefs.getLong(prefKey, 0)
-        return lastAsked > 0
-    }
     
+    /**
+     * Show a dialog to guide the user to re-enable accessibility permission
+     */
     private fun showAccessibilityPermissionDialog() {
-        // Don't show again if we've already asked recently
-        if (hasBeenAskedRecently(PREF_ACCESSIBILITY_ASKED)) {
+        // Only show this dialog if we haven't recently asked
+        if (!shouldShowPermissionDialog(PREF_ACCESSIBILITY_ASKED)) {
             return
         }
         
         MaterialAlertDialogBuilder(this)
             .setTitle("Accessibility Permission Required")
-            .setMessage("App blocking requires the accessibility service to be enabled. This is required only once. Would you like to enable it now?")
-            .setPositiveButton("Enable Now") { _, _ ->
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                
-                // Show a toast with instructions
-                Toast.makeText(
-                    this, 
-                    "Find and enable 'FocusGuard: App Blocker' in the list", 
-                    Toast.LENGTH_LONG
-                ).show()
-                
+            .setMessage("App blocking requires accessibility permission. Would you like to enable it now?")
+            .setPositiveButton("Enable") { _, _ ->
+                // Record that we asked and when we directed to settings
                 markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
+                prefs.edit().putLong("last_accessibility_settings_time", System.currentTimeMillis()).apply()
+                
+                // Send to dedicated permission activity instead of directly to settings
+                val intent = Intent(this, AccessibilityPermissionActivity::class.java)
+                startActivity(intent)
             }
             .setNegativeButton("Later") { _, _ ->
                 markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
             }
-            .setCancelable(false)
             .show()
-    }
-
-    /**
-     * Check if app blocker accessibility service is enabled
-     * and prompt user to enable it if not
-     */
-    fun checkAppBlockerService() {
-        // Skip if already verified to avoid duplicate prompts
-        if (prefs.getBoolean("accessibility_verified", false)) {
-            return
-        }
-        
-        // Only check if we haven't asked recently
-        if (hasBeenAskedRecently(PREF_ACCESSIBILITY_ASKED)) {
-            return
-        }
-        
-        val am = getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices = am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
-        val isServiceEnabled = enabledServices.any { 
-            it.id.contains(packageName + "/.services.AppBlockerAccessibilityService") 
-        }
-        
-        if (!isServiceEnabled) {
-            val builder = AlertDialog.Builder(this)
-                .setTitle("Accessibility Service Required")
-                .setMessage("The app blocker requires accessibility permission to monitor and block apps. Please enable it in the settings.")
-                .setPositiveButton("Go to Settings") { _, _ ->
-                    val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                    startActivity(intent)
-                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
-                }
-                .setNegativeButton("Later") { _, _ ->
-                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
-                }
-                .setCancelable(true)
-            
-            builder.show()
-        }
     }
 
     /**

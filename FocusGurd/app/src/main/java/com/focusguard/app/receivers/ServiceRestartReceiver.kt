@@ -27,6 +27,15 @@ class ServiceRestartReceiver : BroadcastReceiver() {
                 // Try to start the settings activity to re-enable the service
                 val settingsIntent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
                 settingsIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                
+                // Create a pending intent for the notification
+                val pendingIntent = android.app.PendingIntent.getActivity(
+                    context, 
+                    0, 
+                    settingsIntent,
+                    android.app.PendingIntent.FLAG_IMMUTABLE
+                )
+                
                 context.startActivity(settingsIntent)
                 
                 // Show notification to user
@@ -49,6 +58,9 @@ class ServiceRestartReceiver : BroadcastReceiver() {
                     .setContentTitle("App Blocker Service Stopped")
                     .setContentText("Please re-enable the app blocking service in Accessibility Settings")
                     .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                    .setContentIntent(pendingIntent)
+                    // Add a View button that opens the accessibility settings
+                    .addAction(android.R.drawable.ic_menu_view, "View", pendingIntent)
                 
                 notificationManager.notify(5000, builder.build())
             } catch (e: Exception) {

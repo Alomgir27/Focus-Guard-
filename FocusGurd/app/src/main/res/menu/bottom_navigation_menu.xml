@@ -5,6 +5,10 @@
         android:icon="@drawable/ic_apps"
         android:title="Apps" />
     <item
+        android:id="@+id/navigation_routine"
+        android:icon="@android:drawable/ic_menu_today"
+        android:title="Routine" />
+    <item
         android:id="@+id/navigation_usage_stats"
         android:icon="@drawable/ic_usage_stats"
         android:title="@string/tab_usage_stats" />

@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.focusguard.app.data.entity.Task
+import java.time.LocalDateTime
 
 @Dao
 interface TaskDao {
@@ -34,4 +35,7 @@ interface TaskDao {
     
     @Query("UPDATE tasks SET completed = :isCompleted WHERE id = :taskId")
     suspend fun updateTaskCompletionStatus(taskId: Int, isCompleted: Boolean)
+    
+    @Query("SELECT * FROM tasks WHERE completed = 0 ORDER BY dueDate ASC")
+    suspend fun getActiveTasksSync(): List<Task>
 } 

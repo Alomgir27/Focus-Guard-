@@ -630,6 +630,11 @@ class AppBlockerService : AccessibilityService() {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
+        // Create a "View" button intent for the notification
+        val viewButtonIntent = PendingIntent.getActivity(
+            this, 1, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+        
         // Create an informative notification
         val blockedAppsCount = blockedApps.size
         val currentlyBlocking = currentBlockedPackage?.let {
@@ -656,6 +661,8 @@ class AppBlockerService : AccessibilityService() {
             .setVisibility(NotificationCompat.VISIBILITY_SECRET) // Hide from lock screen
             .setShowWhen(false) // Don""t show timestamp
             .setContentIntent(pendingIntent)
+            // Add a View button to the notification
+            .addAction(android.R.drawable.ic_menu_view, "View", viewButtonIntent)
             .build()
     }
     

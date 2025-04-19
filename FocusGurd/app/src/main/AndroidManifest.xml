@@ -47,6 +47,16 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.MyApplication" />
 
+        <!-- Accessibility Permission Activity -->
+        <activity
+            android:name="com.focusguard.app.AccessibilityPermissionActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyApplication"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:noHistory="false" />
+
         <!-- Accessibility Service for App Blocking -->
         <service
             android:name=".services.AppBlockerAccessibilityService"
@@ -107,6 +117,12 @@
                 android:value="false"
                 tools:replace="android:value" />
         </provider>
+
+        <!-- Overlay Notification Service -->
+        <service
+            android:name=".service.OverlayNotificationService"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 

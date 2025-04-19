@@ -11,7 +11,7 @@
     
     <!-- Permission descriptions -->
     <string name="permission_usage_stats">This app needs usage stats permission to monitor and block apps based on your configured schedule.</string>
-    <string name="accessibility_service_description">This helps the app monitor and block specific content within social media apps, such as Instagram Reels or YouTube Shorts. This is required for granular content blocking functionality.</string>
+    <string name="accessibility_service_description">FocusGuard needs this permission to detect and block distracting apps according to your schedule. This service monitors which apps are open and helps you stay focused by blocking unwanted distractions. No personal data is collected.</string>
     <string name="permission_notification">This app needs notification permission to show notifications for blocked apps and other important events.</string>
     <string name="permission_overlay">This app needs overlay permission to display blocking screens over apps that are being blocked.</string>
     <string name="channel_app_blocker">App Blocker</string>

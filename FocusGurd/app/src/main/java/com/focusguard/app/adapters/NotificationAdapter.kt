@@ -3,6 +3,7 @@ package com.focusguard.app.adapters
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -14,13 +15,14 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 class NotificationAdapter(
-    private val onItemClick: (Notification) -> Unit
+    private val onItemClick: (Notification) -> Unit,
+    private val onDeleteClick: (Notification) -> Unit
 ) : ListAdapter<Notification, NotificationAdapter.NotificationViewHolder>(NotificationDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NotificationViewHolder {
         val view = LayoutInflater.from(parent.context)
             .inflate(R.layout.item_notification, parent, false)
-        return NotificationViewHolder(view, onItemClick)
+        return NotificationViewHolder(view, onItemClick, onDeleteClick)
     }
 
     override fun onBindViewHolder(holder: NotificationViewHolder, position: Int) {
@@ -29,12 +31,14 @@ class NotificationAdapter(
 
     class NotificationViewHolder(
         itemView: View,
-        private val onItemClick: (Notification) -> Unit
+        private val onItemClick: (Notification) -> Unit,
+        private val onDeleteClick: (Notification) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val typeView: TextView = itemView.findViewById(R.id.textViewNotificationType)
         private val timeView: TextView = itemView.findViewById(R.id.textViewNotificationTime)
         private val titleView: TextView = itemView.findViewById(R.id.textViewNotificationTitle)
         private val contentView: TextView = itemView.findViewById(R.id.textViewNotificationContent)
+        private val deleteButton: ImageButton = itemView.findViewById(R.id.buttonDeleteNotification)
         
         private var currentNotification: Notification? = null
         
@@ -42,6 +46,12 @@ class NotificationAdapter(
             itemView.setOnClickListener {
                 currentNotification?.let { notification ->
                     onItemClick(notification)
+                }
+            }
+            
+            deleteButton.setOnClickListener {
+                currentNotification?.let { notification ->
+                    onDeleteClick(notification)
                 }
             }
         }

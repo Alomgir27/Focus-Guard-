@@ -44,4 +44,10 @@
         android:label="Notification History"
         tools:layout="@layout/fragment_notification_history" />
         
+    <fragment
+        android:id="@+id/dailyRoutineFragment"
+        android:name="com.focusguard.app.fragments.DailyRoutineFragment"
+        android:label="Daily Routine"
+        tools:layout="@layout/fragment_daily_routine" />
+        
 </navigation> 

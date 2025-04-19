@@ -179,6 +179,12 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             
             // Write diagnostic log that service started
             writeLog("Service onCreate called")
+            
+            // Notify the app that the service is active by updating the shared preference
+            getSharedPreferences("app_permissions", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("accessibility_verified", true)
+                .apply()
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate: ${e.message}", e)
             writeLog("ERROR in onCreate: ${e.message}")
@@ -291,6 +297,12 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             
             // Always keep blockingActive true to ensure direct blocking works
             blockingActive = true
+            
+            // Update the shared preference to indicate the service is active
+            getSharedPreferences("app_permissions", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("accessibility_verified", true)
+                .apply()
             
             // Refresh the blocked apps list immediately
             serviceScope.launch {
@@ -460,6 +472,13 @@ class AppBlockerAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "Error unregistering force unblock receiver: ${e.message}")
             }
             
+            // Try to unregister the reload receiver
+            try {
+                unregisterReceiver(reloadBlockedAppsReceiver)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error unregistering reload receiver: ${e.message}")
+            }
+            
             // Cancel jobs
             persistentCheckJob?.cancel()
             serviceHeartbeatJob?.cancel()
@@ -470,6 +489,12 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             }
             
             hideBlockingScreen()
+            
+            // Mark the service as inactive in shared preferences
+            getSharedPreferences("app_permissions", Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("accessibility_verified", false)
+                .apply()
             
             // Immediately try to restart the service via a broadcast
             val intent = Intent("com.focusguard.app.RESTART_APP_BLOCKER")
@@ -1012,10 +1037,10 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "",  // Empty name to minimize visibility
+                "Focus Guard Service",  // Non-empty name required by Android
                 NotificationManager.IMPORTANCE_MIN
             ).apply {
-                description = ""  // Empty description
+                description = "Background service notification"  // Non-empty description
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
@@ -1032,9 +1057,14 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
+        // Create a "View" button intent that goes to MainActivity
+        val viewButtonIntent = PendingIntent.getActivity(
+            this, 1, notificationIntent, PendingIntent.FLAG_IMMUTABLE
+        )
+        
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("")  // Empty title
-            .setContentText("")  // Empty text
+            .setContentTitle("Focus Guard")  // Non-empty title
+            .setContentText("Running in background")  // Non-empty text
             .setSmallIcon(android.R.drawable.ic_lock_lock)  // Use a system icon instead
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // Hide from lock screen
@@ -1042,6 +1072,8 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             .setSilent(true)  // Silent notification
             .setOngoing(true)  // Required for foreground service
             .setContentIntent(pendingIntent)
+            // Add a View button to the notification
+            .addAction(android.R.drawable.ic_menu_view, "View", viewButtonIntent)
             .build()
     }
     

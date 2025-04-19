@@ -46,6 +46,16 @@
                 android:text="Time"
                 android:textColor="#AAAAAA"
                 android:textSize="12sp" />
+                
+            <ImageButton
+                android:id="@+id/buttonDeleteNotification"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginStart="8dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Delete notification"
+                android:src="@android:drawable/ic_menu_delete"
+                app:tint="#E64A19" />
         </LinearLayout>
 
         <TextView
@@ -68,5 +78,15 @@
             android:textSize="14sp"
             android:lineSpacingMultiplier="1.2"
             android:maxLines="100" />
+            
+        <ImageView
+            android:id="@+id/imageViewNotificationLogo"
+            android:layout_width="60dp"
+            android:layout_height="24dp"
+            android:layout_gravity="end"
+            android:layout_marginTop="8dp"
+            android:alpha="0.7"
+            android:contentDescription="App logo"
+            android:src="@drawable/logo" />
     </LinearLayout>
 </androidx.cardview.widget.CardView> 

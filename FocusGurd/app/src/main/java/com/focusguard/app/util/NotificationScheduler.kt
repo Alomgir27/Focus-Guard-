@@ -188,4 +188,68 @@ class NotificationScheduler(private val context: Context) {
         
         workManager.enqueue(notificationWorkRequest)
     }
+
+    /**
+     * Set the notification frequency (how many notifications per day)
+     */
+    fun setNotificationFrequency(frequency: Int) {
+        Log.d(TAG, "Setting notification frequency to $frequency")
+        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        prefs.edit().putInt("notification_frequency", frequency).apply()
+        
+        // Reschedule notifications with new frequency
+        scheduleAllNotifications()
+    }
+
+    /**
+     * Set the morning notification time
+     */
+    fun setMorningTime(time: LocalTime) {
+        Log.d(TAG, "Setting morning notification time to $time")
+        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("morning_hour", time.hour)
+            .putInt("morning_minute", time.minute)
+            .apply()
+        
+        // Reschedule the morning notifications
+        scheduleAllNotifications()
+    }
+
+    /**
+     * Set the evening notification time
+     */
+    fun setEveningTime(time: LocalTime) {
+        Log.d(TAG, "Setting evening notification time to $time")
+        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putInt("evening_hour", time.hour)
+            .putInt("evening_minute", time.minute)
+            .apply()
+        
+        // Reschedule the evening notifications
+        scheduleAllNotifications()
+    }
+
+    /**
+     * Enable or disable a specific notification type
+     */
+    fun setNotificationTypeEnabled(type: NotificationType, enabled: Boolean) {
+        Log.d(TAG, "Setting notification type $type enabled=$enabled")
+        
+        val prefKey = when (type) {
+            NotificationType.MOTIVATION -> "enable_motivational"
+            NotificationType.HABIT_REMINDER -> "enable_habit_reminders"
+            NotificationType.RELIGIOUS_QUOTE -> "enable_religious_quotes"
+            NotificationType.INSIGHT -> "enable_insights"
+            NotificationType.APP_USAGE_WARNING -> "enable_usage_warnings"
+            NotificationType.GENERAL -> "enable_general"
+        }
+        
+        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(prefKey, enabled).apply()
+        
+        // Reschedule notifications with updated settings
+        scheduleAllNotifications()
+    }
 } 

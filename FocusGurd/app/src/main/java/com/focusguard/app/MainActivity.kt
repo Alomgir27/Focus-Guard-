@@ -112,7 +112,7 @@ class MainActivity : BaseActivity() {
             }
             
             // Force check for accessibility service first - this is critical for app blocking
-            if (!isAccessibilityServiceEnabled()) {
+            if (!prefs.getBoolean("accessibility_verified", false) && !isAccessibilityServiceEnabled()) {
                 Log.d(TAG, "Accessibility service is NOT enabled - prompting user")
                 MaterialAlertDialogBuilder(this)
                     .setTitle("App Blocking Not Working")
@@ -128,7 +128,11 @@ class MainActivity : BaseActivity() {
                     }
                     .show()
             } else {
-                Log.d(TAG, "Accessibility service is enabled")
+                Log.d(TAG, "Accessibility service is enabled or verified")
+                // Mark as verified if it's enabled but not yet verified
+                if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
+                    prefs.edit().putBoolean("accessibility_verified", true).apply()
+                }
                 // Check for other required permissions only after accessibility is confirmed
                 checkRequiredPermissions()
             }
@@ -227,13 +231,37 @@ class MainActivity : BaseActivity() {
     private fun checkRequiredPermissions() {
         try {
             // Check for Accessibility Service first (most important for app blocking)
-            // Only show the dialog if we haven't verified accessibility and it's not enabled
-            if (!prefs.getBoolean("accessibility_verified", false) && !isAccessibilityServiceEnabled()) {
-                showAccessibilityPermissionDialog()
-                return // Don't check other permissions until this one is handled
+            // Only show the dialog if accessibility is not verified and is not enabled
+            if (prefs.getBoolean("accessibility_verified", false) || isAccessibilityServiceEnabled()) {
+                // Mark as verified if it's enabled but not yet marked as verified
+                if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
+                    prefs.edit().putBoolean("accessibility_verified", true).apply()
+                }
+                
+                // Check other permissions if accessibility is granted
+                checkOtherPermissions()
+                return // Skip showing accessibility dialog
             }
             
-            // Check other permissions if accessibility is granted
+            // Only show dialog if permission not granted and we haven't asked recently
+            // This check prevents showing the dialog if already shown in SplashActivity
+            if (!hasBeenAskedRecently(PREF_ACCESSIBILITY_ASKED)) {
+                showAccessibilityPermissionDialog()
+                return // Don't check other permissions until this one is handled
+            } else {
+                // If we asked recently (likely in SplashActivity), check if it's been more than a day
+                val lastAsked = prefs.getLong(PREF_ACCESSIBILITY_ASKED, 0)
+                val now = System.currentTimeMillis()
+                val hoursDiff = (now - lastAsked) / (1000 * 60 * 60) // Convert to hours
+                
+                // Only show again if it's been more than 24 hours since last asked
+                if (hoursDiff >= 24) {
+                    showAccessibilityPermissionDialog()
+                    return // Don't check other permissions until this one is handled
+                }
+            }
+            
+            // Check other permissions if accessibility dialog was skipped
             checkOtherPermissions()
         } catch (e: Exception) {
             Log.e(TAG, "Error checking permissions: ${e.message}", e)
@@ -426,21 +454,49 @@ class MainActivity : BaseActivity() {
         if (!prefs.getBoolean("accessibility_verified", false) && isAccessibilityServiceEnabled()) {
             // Mark as verified since it's now enabled
             prefs.edit().putBoolean("accessibility_verified", true).apply()
-            Toast.makeText(
-                this,
-                "Accessibility permission granted successfully!",
-                Toast.LENGTH_SHORT
-            ).show()
+            
+            // Show a confirmation dialog to inform the user that the permission was granted successfully
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Permission Granted")
+                .setMessage("Accessibility permission was granted successfully! FocusGuard can now block distracting apps.")
+                .setPositiveButton("Great!") { _, _ -> }
+                .show()
+            
+            Log.d(TAG, "Accessibility permission has been granted successfully")
+        } else if (!isAccessibilityServiceEnabled() && prefs.getBoolean("accessibility_verified", false)) {
+            // The permission was previously granted but now revoked
+            prefs.edit().putBoolean("accessibility_verified", false).apply()
+            
+            // Show warning that the permission was revoked
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Permission Revoked")
+                .setMessage("Accessibility permission was revoked. FocusGuard cannot block apps without this permission.")
+                .setCancelable(false)
+                .setPositiveButton("Enable Again") { _, _ ->
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    Toast.makeText(
+                        this, 
+                        "Find and enable 'FocusGuard: App Blocker' in the list", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
+                }
+                .setNegativeButton("Later") { _, _ -> 
+                    markPermissionAsked(PREF_ACCESSIBILITY_ASKED)
+                }
+                .show()
         }
         
         // Check if overlay permission is now enabled
         if (!prefs.getBoolean("overlay_verified", false) && Settings.canDrawOverlays(this)) {
             prefs.edit().putBoolean("overlay_verified", true).apply()
+            Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
         }
         
         // Check if usage stats permission is now enabled
         if (!prefs.getBoolean("usage_stats_verified", false) && hasUsageStatsPermission()) {
             prefs.edit().putBoolean("usage_stats_verified", true).apply()
+            Toast.makeText(this, "Usage stats permission granted!", Toast.LENGTH_SHORT).show()
         }
     }
 

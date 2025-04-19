@@ -107,7 +107,7 @@
                     android:layout_marginBottom="16dp" />
 
                 <TextView
-                    android:id="@+id/textViewFrequencyDescription"
+                    android:id="@+id/textViewFrequencyValue"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="Medium frequency (3 notifications per day)"
@@ -165,7 +165,7 @@
                     android:layout_marginBottom="8dp" />
 
                 <com.google.android.material.switchmaterial.SwitchMaterial
-                    android:id="@+id/switchMotivationalContent"
+                    android:id="@+id/switchMotivational"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/motivational_content"
@@ -461,6 +461,104 @@
                     android:layout_height="wrap_content"
                     android:text="Save AI Preferences"
                     android:backgroundTint="#FFA500" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardAISettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toBottomOf="@id/cardAIPreferences"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="16dp">
+                    
+                    <ImageView
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:src="@drawable/logo2"
+                        android:layout_marginEnd="12dp"/>
+                        
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="AI Usage Settings"
+                        android:textAppearance="@style/TextAppearance.Material3.TitleLarge" />
+                </LinearLayout>
+                
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Control how AI-generated content is used in notifications"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                    android:layout_marginBottom="16dp" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchUseAI"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Use AI-generated content"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:checked="true"
+                    android:layout_marginBottom="8dp" />
+                    
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchUseCache"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Use cached AI responses when possible"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:checked="true"
+                    android:layout_marginBottom="8dp" />
+                    
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchPreGenerateOffline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Pre-generate content for offline use"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:checked="true"
+                    android:layout_marginBottom="16dp" />
+                    
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="API Usage Statistics"
+                    android:textStyle="bold"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:layout_marginBottom="8dp" />
+                    
+                <TextView
+                    android:id="@+id/textViewApiUsage"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="API calls today: 0/5"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                    android:layout_marginBottom="8dp" />
+                    
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/buttonClearCache"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Clear AI Content Cache"
+                    android:backgroundTint="#E57373" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 

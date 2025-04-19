@@ -39,7 +39,7 @@ class NotificationService(private val context: Context) {
         const val CHANNEL_HABIT_REMINDER = "habit_reminder_notifications"
         const val CHANNEL_RELIGIOUS = "religious_notifications"
         const val CHANNEL_INSIGHTS = "insight_notifications"
-        const val CHANNEL_GENERAL = "general_notifications"
+        const val CHANNEL_GENERAL = "channel_general"
         
         // Notification ID base values - each type will have a range of 1000 IDs
         private const val NOTIFICATION_ID_MOTIVATION = 1000
@@ -253,7 +253,7 @@ class NotificationService(private val context: Context) {
         
         // Create notification builder with optimized content
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.logo2)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(notification.title)
             .setContentText(optimizedContent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(optimizedContent))
@@ -300,7 +300,7 @@ class NotificationService(private val context: Context) {
             val summaryNotification = NotificationCompat.Builder(context, CHANNEL_GENERAL)
                 .setContentTitle("New Notifications")
                 .setContentText("You have new notifications")
-                .setSmallIcon(R.drawable.logo2)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setGroup(GROUP_KEY_NOTIFICATIONS)
                 .setGroupSummary(true)
                 .setAutoCancel(true)

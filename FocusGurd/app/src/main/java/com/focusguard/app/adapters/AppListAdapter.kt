@@ -93,15 +93,7 @@ class AppListAdapter(
                 }
             }
             
-            // Make the whole item clickable for configuration
-            itemView.setOnClickListener {
-                currentApp?.let { app ->
-                    if (app.isBlocked) {
-                        // If app is already blocked, clicking on it should configure
-                        onAppConfigureBlock(app)
-                    }
-                }
-            }
+            // No click listener on app name text or anywhere else on the card
         }
 
         private fun checkPasswordBeforeUnblock(app: AppInfo) {

@@ -21,6 +21,9 @@ import com.focusguard.app.data.repository.TaskRepository
 import com.focusguard.app.data.repository.UserHabitRepository
 import com.focusguard.app.data.repository.UserInsightRepository
 import com.focusguard.app.services.NotificationService
+import com.focusguard.app.util.ApiKeyManager
+import com.focusguard.app.util.NotificationCacheManager
+import com.focusguard.app.util.NotificationGenerator
 import com.focusguard.app.util.NotificationScheduler
 import com.focusguard.app.util.NotificationUtils
 import kotlinx.coroutines.Dispatchers
@@ -28,75 +31,37 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 
 class MyApplication : Application(), Configuration.Provider {
 
     // Use lazy initialization for all database-related components
     companion object {
-        private const val TAG = "MyApplication"
+        private const val TAG = "FocusGuardApp"
         
-        lateinit var instance: MyApplication
-            private set
+        // Define migration from version 1 to 2
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Example migration if needed
+                // database.execSQL("CREATE TABLE IF NOT EXISTS `new_table` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL)")
+            }
+        }
         
-        // Database instance - lazily initialized
+        // Reference to application instance
+        private lateinit var instance: MyApplication
+        
+        // Lazy-initialized database
         val database: AppDatabase by lazy {
             try {
                 Log.d(TAG, "Initializing database")
-                
-                // Define the migration from 6 to 7
-                val MIGRATION_6_7 = object : Migration(6, 7) {
-                    override fun migrate(database: SupportSQLiteDatabase) {
-                        // Create the new blocked_apps_schedule table
-                        database.execSQL("""
-                            CREATE TABLE IF NOT EXISTS `blocked_apps_schedule` (
-                                `packageName` TEXT NOT NULL,
-                                `appName` TEXT NOT NULL,
-                                `isActive` INTEGER NOT NULL DEFAULT 1,
-                                `startTime` TEXT,
-                                `endTime` TEXT,
-                                `blockAllDay` INTEGER NOT NULL DEFAULT 0,
-                                `enabledDays` INTEGER NOT NULL DEFAULT 127,
-                                PRIMARY KEY(`packageName`)
-                            )
-                        """)
-                    }
-                }
-                
-                // Define the migration from 7 to 8 (adding password field)
-                val MIGRATION_7_8 = object : Migration(7, 8) {
-                    override fun migrate(database: SupportSQLiteDatabase) {
-                        // Add the password column to the blocked_apps_schedule table
-                        database.execSQL(
-                            "ALTER TABLE blocked_apps_schedule ADD COLUMN password TEXT"
-                        )
-                    }
-                }
-                
-                // Define the migration from 8 to 9 (adding schedule fields to blocked_apps)
-                val MIGRATION_8_9 = object : Migration(8, 9) {
-                    override fun migrate(database: SupportSQLiteDatabase) {
-                        // Add schedule columns to the blocked_apps table
-                        database.execSQL("ALTER TABLE blocked_apps ADD COLUMN startTime TEXT DEFAULT NULL")
-                        database.execSQL("ALTER TABLE blocked_apps ADD COLUMN endTime TEXT DEFAULT NULL")
-                        database.execSQL("ALTER TABLE blocked_apps ADD COLUMN blockAllDay INTEGER NOT NULL DEFAULT 0")
-                        database.execSQL("ALTER TABLE blocked_apps ADD COLUMN enabledDays INTEGER NOT NULL DEFAULT 127")
-                        database.execSQL("ALTER TABLE blocked_apps ADD COLUMN password TEXT DEFAULT NULL")
-                    }
-                }
-                
                 Room.databaseBuilder(
                     instance.applicationContext,
                     AppDatabase::class.java,
-                    "myapplication_database"
+                    "focusguard-db"
                 )
-                .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
-                .fallbackToDestructiveMigration() // Only as last resort if migration fails
-                .addCallback(object : androidx.room.RoomDatabase.Callback() {
-                    override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                        super.onOpen(db)
-                        Log.d(TAG, "Database opened successfully")
-                    }
-                })
+                .addMigrations(MIGRATION_1_2)
+                .fallbackToDestructiveMigration()
                 .build()
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing database: ${e.message}", e)
@@ -104,46 +69,24 @@ class MyApplication : Application(), Configuration.Provider {
             }
         }
         
-        // DEPRECATED: Use appBlockRepository instead
-        @Deprecated("Use appBlockRepository instead", ReplaceWith("appBlockRepository"))
-        val appBlockingRepository: AppBlockingRepository by lazy {
-            try {
-                Log.d(TAG, "Initializing appBlockingRepository (DEPRECATED)")
-                AppBlockingRepository(database.appBlockingDao())
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing appBlockingRepository: ${e.message}", e)
-                throw e
-            }
-        }
-        
-        // Primary repository for app blocking
-        val appBlockRepository: AppBlockRepository by lazy {
-            try {
-                Log.d(TAG, "Initializing appBlockRepository")
-                AppBlockRepository(database.appBlockDao())
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing appBlockRepository: ${e.message}", e)
-                throw e
-            }
-        }
-        
-        val taskRepository: TaskRepository by lazy {
-            try {
-                Log.d(TAG, "Initializing taskRepository")
-                TaskRepository(database.taskDao())
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing taskRepository: ${e.message}", e)
-                throw e
-            }
-        }
-        
-        // New repositories for notifications and user data
+        // Lazy-initialized repositories
         val userHabitRepository: UserHabitRepository by lazy {
             try {
                 Log.d(TAG, "Initializing userHabitRepository")
                 UserHabitRepository(database.userHabitDao())
             } catch (e: Exception) {
                 Log.e(TAG, "Error initializing userHabitRepository: ${e.message}", e)
+                throw e
+            }
+        }
+        
+        // Use AppBlockRepository if it exists, otherwise create a temporary one
+        val appBlockRepository: AppBlockRepository by lazy {
+            try {
+                Log.d(TAG, "Initializing appBlockRepository")
+                AppBlockRepository(database.appBlockDao())
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing appBlockRepository: ${e.message}", e)
                 throw e
             }
         }
@@ -173,10 +116,16 @@ class MyApplication : Application(), Configuration.Provider {
         
         private lateinit var aiPreferencesQueue: AiPreferencesQueue
         
+        // Our new components
+        private lateinit var notificationCacheManager: NotificationCacheManager
+        private lateinit var apiKeyManager: ApiKeyManager
+        
         fun getAiPreferencesQueue(): AiPreferencesQueue = aiPreferencesQueue
+        fun getNotificationCacheManager(): NotificationCacheManager = notificationCacheManager
+        fun getApiKeyManager(): ApiKeyManager = apiKeyManager
     }
 
-    private val applicationScope = MainScope()
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var notificationScheduler: NotificationScheduler
     
     override fun onCreate() {
@@ -223,6 +172,10 @@ class MyApplication : Application(), Configuration.Provider {
             // Create notification channels
             createNotificationChannels()
             
+            // Initialize new components
+            notificationCacheManager = NotificationCacheManager(this)
+            apiKeyManager = ApiKeyManager(this)
+            
             // Initialize notification scheduler
             notificationScheduler = NotificationScheduler(this)
             
@@ -239,6 +192,9 @@ class MyApplication : Application(), Configuration.Provider {
                     
                     // Schedule notifications after database is initialized
                     notificationScheduler.scheduleAllNotifications()
+                    
+                    // Pre-generate offline content if enabled
+                    preGenerateOfflineContentIfEnabled()
                 } catch (e: Exception) {
                     Log.e(TAG, "Database initialization error: ${e.message}", e)
                 }
@@ -250,6 +206,24 @@ class MyApplication : Application(), Configuration.Provider {
             Log.d(TAG, "Application onCreate completed")
         } catch (e: Exception) {
             Log.e(TAG, "Fatal error in application onCreate: ${e.message}", e)
+        }
+    }
+    
+    /**
+     * Pre-generate offline content if the setting is enabled
+     */
+    private suspend fun preGenerateOfflineContentIfEnabled() {
+        try {
+            val prefs = getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+            val shouldPreGenerate = prefs.getBoolean("pre_generate_offline", true)
+            
+            if (shouldPreGenerate) {
+                Log.d(TAG, "Pre-generating offline content on startup")
+                val notificationGenerator = NotificationGenerator(this)
+                notificationGenerator.preGenerateOfflineContent()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error pre-generating offline content", e)
         }
     }
     

@@ -46,10 +46,23 @@ object NotificationUtils {
      * Get a sound Uri for notifications
      */
     fun getNotificationSoundUri(context: Context): Uri {
-        return Uri.parse(
+        // Try to access the app's custom sound
+        val customSoundUri = Uri.parse(
             "${ContentResolver.SCHEME_ANDROID_RESOURCE}://" +
             "${context.packageName}/raw/notification_sound"
         )
+        
+        // Check if the app has a raw resource with this name
+        val resources = context.resources
+        val resourceId = resources.getIdentifier("notification_sound", "raw", context.packageName)
+        
+        // If custom sound doesn't exist, use system default
+        return if (resourceId != 0) {
+            customSoundUri
+        } else {
+            // Use system default notification sound
+            android.provider.Settings.System.DEFAULT_NOTIFICATION_URI
+        }
     }
     
     /**

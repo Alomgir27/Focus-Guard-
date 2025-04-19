@@ -1,3 +1,7 @@
+// Import Java util and io packages
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -7,9 +11,9 @@ plugins {
 
 // Add this block to load properties from local.properties
 val localPropertiesFile = rootProject.file("local.properties")
-val localProperties = java.util.Properties()
+val localProperties = Properties()
 if (localPropertiesFile.exists()) {
-    localProperties.load(java.io.FileInputStream(localPropertiesFile))
+    localProperties.load(FileInputStream(localPropertiesFile))
 }
 
 android {
@@ -53,6 +57,7 @@ android {
     buildFeatures {
         viewBinding = true
         dataBinding = false
+        buildConfig = true
     }
     
     // Disable lint to allow build to complete
@@ -131,4 +136,10 @@ dependencies {
     
     // MPAndroidChart for PieChart
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    
+    // Required for new notification utils
+    implementation("com.google.code.gson:gson:2.10.1")
+    
+    // Required for network connectivity checks
+    implementation("androidx.core:core-ktx:1.12.0")
 }

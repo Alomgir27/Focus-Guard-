@@ -6,10 +6,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.fragment.app.Fragment
-import androidx.lifecycle.lifecycleScope
 import com.focusguard.app.R
 import com.focusguard.app.databinding.FragmentNotificationSettingsBinding
 import com.focusguard.app.util.NotificationScheduler
@@ -18,7 +16,6 @@ import com.focusguard.app.util.ApiKeyManager
 import com.focusguard.app.util.NotificationCacheManager
 import com.focusguard.app.util.NotificationGenerator
 import com.google.android.material.slider.Slider
-import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -57,16 +54,15 @@ class NotificationSettingsFragment : Fragment() {
         
         setupSlider()
         setupTimePickers()
-        setupSwitches()
-        setupNotificationHistory()
+        setupNotificationSwitch()
         setupAiPreferences()
-        setupAiSettings()
+        setupNotificationHistoryButton()
     }
     
     private fun setupSlider() {
         // Load saved notification frequency
         val prefs = requireContext().getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
-        val currentFrequency = prefs.getInt("notification_frequency", 3)
+        val currentFrequency = prefs.getInt("notification_frequency", 2)
         
         binding.sliderNotificationFrequency.value = currentFrequency.toFloat()
         updateFrequencyText(currentFrequency)
@@ -164,53 +160,37 @@ class NotificationSettingsFragment : Fragment() {
         textView.text = time.format(formatter)
     }
     
-    private fun setupSwitches() {
+    private fun setupNotificationSwitch() {
         // Get saved preferences
         val prefs = requireContext().getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
         
-        // Setup motivation notifications switch
-        binding.switchMotivational.isChecked = prefs.getBoolean("enable_motivational", true)
-        binding.switchMotivational.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("enable_motivational", isChecked).apply()
-            notificationScheduler.setNotificationTypeEnabled(com.focusguard.app.data.entity.NotificationType.MOTIVATION, isChecked)
-        }
-        
-        // Setup habit reminder notifications switch
-        binding.switchHabitReminders.isChecked = prefs.getBoolean("enable_habit_reminders", true)
-        binding.switchHabitReminders.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("enable_habit_reminders", isChecked).apply()
-            notificationScheduler.setNotificationTypeEnabled(com.focusguard.app.data.entity.NotificationType.HABIT_REMINDER, isChecked)
-        }
-        
-        // Setup religious quotes notifications switch
-        binding.switchReligiousQuotes.isChecked = prefs.getBoolean("enable_religious_quotes", true)
-        binding.switchReligiousQuotes.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("enable_religious_quotes", isChecked).apply()
-            notificationScheduler.setNotificationTypeEnabled(com.focusguard.app.data.entity.NotificationType.RELIGIOUS_QUOTE, isChecked)
-        }
-        
-        // Setup insight notifications switch
-        binding.switchPersonalizedInsights.isChecked = prefs.getBoolean("enable_insights", true)
-        binding.switchPersonalizedInsights.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("enable_insights", isChecked).apply()
-            notificationScheduler.setNotificationTypeEnabled(com.focusguard.app.data.entity.NotificationType.INSIGHT, isChecked)
-        }
-    }
-    
-    private fun setupNotificationHistory() {
-        binding.buttonViewNotificationHistory.setOnClickListener {
-            // Navigate to notification history
-            val fragmentManager = requireActivity().supportFragmentManager
-            fragmentManager.beginTransaction()
-                .replace(R.id.nav_host_fragment, NotificationHistoryFragment())
-                .addToBackStack(null) // Add to back stack so user can navigate back
-                .commit()
+        // Setup main notification toggle
+        binding.switchEnableNotifications.isChecked = prefs.getBoolean("enable_notifications", true)
+        binding.switchEnableNotifications.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("enable_notifications", isChecked).apply()
+            
+            // Enable or disable all notification features
+            binding.sliderNotificationFrequency.isEnabled = isChecked
+            binding.buttonSetMorningTime.isEnabled = isChecked
+            binding.buttonSetEveningTime.isEnabled = isChecked
+            
+            if (!isChecked) {
+                // Cancel all scheduled notifications
+                notificationScheduler.cancelAllNotifications()
+            } else {
+                // Reschedule notifications
+                notificationScheduler.scheduleAllNotifications()
+            }
         }
     }
     
     private fun setupAiPreferences() {
         // Load saved AI preferences
         val prefs = requireContext().getSharedPreferences("ai_preferences", Context.MODE_PRIVATE)
+        
+        // Rename the title to Routine Preferences
+        binding.textViewAIPreferencesTitle.text = "Routine Preferences"
+        binding.textViewAIPreferencesSubtitle.text = "Customize your routines based on your personal preferences"
         
         // Set text fields with saved values
         binding.editTextHabits.setText(prefs.getString("habits", ""))
@@ -258,86 +238,29 @@ class NotificationSettingsFragment : Fragment() {
                 
                 Toast.makeText(
                     requireContext(),
-                    "AI preferences saved successfully",
+                    "Preferences saved successfully",
                     Toast.LENGTH_SHORT
                 ).show()
             } catch (e: Exception) {
-                Log.e("NotificationSettings", "Error saving AI preferences: ${e.message}")
+                Log.e("NotificationSettings", "Error saving preferences: ${e.message}")
                 Toast.makeText(
                     requireContext(),
-                    "Failed to save AI preferences",
+                    "Failed to save preferences",
                     Toast.LENGTH_SHORT
                 ).show()
             }
         }
     }
     
-    private fun setupAiSettings() {
-        // Get shared preferences
-        val prefs = requireContext().getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
-        
-        // Initialize switches with saved values
-        binding.switchUseAI.isChecked = prefs.getBoolean("use_ai", true)
-        binding.switchUseCache.isChecked = prefs.getBoolean("use_cache", true)
-        binding.switchPreGenerateOffline.isChecked = prefs.getBoolean("pre_generate_offline", true)
-        
-        // Set up listeners
-        binding.switchUseAI.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("use_ai", isChecked).apply()
-            
-            // Update dependent controls
-            binding.switchUseCache.isEnabled = isChecked
-            binding.switchPreGenerateOffline.isEnabled = isChecked
+    private fun setupNotificationHistoryButton() {
+        binding.buttonViewNotificationHistory.setOnClickListener {
+            // Navigate to notification history fragment
+            val fragmentManager = requireActivity().supportFragmentManager
+            fragmentManager.beginTransaction()
+                .replace(R.id.nav_host_fragment, NotificationHistoryFragment())
+                .addToBackStack(null)
+                .commit()
         }
-        
-        binding.switchUseCache.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("use_cache", isChecked).apply()
-        }
-        
-        binding.switchPreGenerateOffline.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean("pre_generate_offline", isChecked).apply()
-            
-            // If turned on, start pre-generating content
-            if (isChecked) {
-                lifecycleScope.launch {
-                    try {
-                        notificationGenerator.preGenerateOfflineContent()
-                        Toast.makeText(
-                            requireContext(),
-                            "Pre-generating content for offline use",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } catch (e: Exception) {
-                        Log.e("NotificationSettings", "Error pre-generating content: ${e.message}")
-                    }
-                }
-            }
-        }
-        
-        // Set up clear cache button
-        binding.buttonClearCache.setOnClickListener {
-            cacheManager.clearAllCache()
-            Toast.makeText(
-                requireContext(),
-                "AI content cache cleared",
-                Toast.LENGTH_SHORT
-            ).show()
-        }
-        
-        // Update API usage statistics
-        updateApiUsageStats()
-    }
-    
-    private fun updateApiUsageStats() {
-        // Get API usage stats from preferences
-        val prefs = requireContext().getSharedPreferences("ai_usage", Context.MODE_PRIVATE)
-        val todayUsage = prefs.getInt(
-            java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE),
-            0
-        )
-        
-        // Update the text view
-        binding.textViewApiUsage.text = "API calls today: $todayUsage/5"
     }
     
     override fun onDestroyView() {

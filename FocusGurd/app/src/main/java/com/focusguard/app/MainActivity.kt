@@ -420,9 +420,8 @@ class MainActivity : BaseActivity() {
                 showAccessibilityPermissionDialog()
             }
         } else if (isAccessibilityServiceEnabled() && !prefs.getBoolean("accessibility_verified", false)) {
-            // Permission was just granted - update the flag and show a short toast
+            // Permission was just granted - update the flag but don't show a toast
             prefs.edit().putBoolean("accessibility_verified", true).apply()
-            Toast.makeText(this, "App blocking is now active", Toast.LENGTH_SHORT).show()
         }
         
         // Check if overlay permission is now enabled

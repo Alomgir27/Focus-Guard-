@@ -6,40 +6,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import com.focusguard.app.data.entity.NotificationType
-import com.focusguard.app.service.OverlayNotificationService
 
 /**
  * Helper class for showing notifications
  */
 object NotificationHelper {
-
-    /**
-     * Show an overlay notification
-     * @param context The context
-     * @param title The notification title
-     * @param message The notification message
-     * @param type The notification type
-     * @param id Optional notification ID for tracking
-     * @return true if shown, false if permission not granted
-     */
-    fun showOverlayNotification(
-        context: Context, 
-        title: String, 
-        message: String, 
-        type: NotificationType = NotificationType.GENERAL,
-        id: Long = -1
-    ): Boolean {
-        // Check if we have the permission
-        if (!checkOverlayPermission(context)) {
-            // Open settings to request permission
-            requestOverlayPermission(context)
-            return false
-        }
-        
-        // Show the notification
-        OverlayNotificationService.showNotification(context, title, message, type, id)
-        return true
-    }
     
     /**
      * Check if the app has permission to draw overlays

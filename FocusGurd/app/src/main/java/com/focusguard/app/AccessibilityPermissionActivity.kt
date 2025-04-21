@@ -165,22 +165,17 @@ class AccessibilityPermissionActivity : AppCompatActivity() {
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
             startActivity(intent)
             
-            // Show toast with instructions
-            Toast.makeText(
-                this,
-                "Find 'FocusGuard: App Blocker' and toggle ON",
-                Toast.LENGTH_LONG
-            ).show()
+            // Toast removed to avoid showing notifications
             
         } catch (e: Exception) {
             Log.e(TAG, "Error opening accessibility settings: ${e.message}", e)
-            Toast.makeText(this, "Error opening settings. Please try again.", Toast.LENGTH_SHORT).show()
+            // Error toast also removed
         }
     }
     
     private fun checkPermissionManually() {
         Log.d(TAG, "Manual permission check requested")
-        Toast.makeText(this, "Checking permission status...", Toast.LENGTH_SHORT).show()
+        // Toast removed to avoid showing notifications
         
         // Start continuous checking
         checkingActive = true
@@ -260,12 +255,7 @@ class AccessibilityPermissionActivity : AppCompatActivity() {
                 handler.postDelayed(permissionCheckRunnable, PERMISSION_CHECK_INTERVAL)
             }
             
-            // Show toast reminding user to enable permission
-            Toast.makeText(
-                this,
-                "Please enable accessibility permission for FocusGuard",
-                Toast.LENGTH_LONG
-            ).show()
+            // Toast notification removed to avoid showing notifications
         }
     }
     

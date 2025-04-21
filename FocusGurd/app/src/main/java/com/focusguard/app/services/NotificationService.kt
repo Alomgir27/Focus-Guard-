@@ -258,9 +258,12 @@ class NotificationService(private val context: Context) {
         customView.setTextViewText(R.id.textViewNotificationContent, optimizedContent)
         customView.setImageViewResource(R.id.imageViewNotificationLogo, R.drawable.logo)
         
+        // Set up the View button in the custom layout to use the same pending intent
+        customView.setOnClickPendingIntent(R.id.buttonViewNotification, pendingIntent)
+        
         // Create notification builder with optimized content
         val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notification)
+            .setSmallIcon(R.drawable.transparent_icon)
             .setContentTitle(notification.title)
             .setContentText(optimizedContent)
             .setStyle(NotificationCompat.BigTextStyle().bigText(optimizedContent))
@@ -320,7 +323,7 @@ class NotificationService(private val context: Context) {
             val summaryNotification = NotificationCompat.Builder(context, CHANNEL_GENERAL)
                 .setContentTitle("New Notifications")
                 .setContentText("You have new notifications")
-                .setSmallIcon(R.drawable.ic_notification)
+                .setSmallIcon(R.drawable.transparent_icon)
                 .setGroup(GROUP_KEY_NOTIFICATIONS)
                 .setGroupSummary(true)
                 .setAutoCancel(true)

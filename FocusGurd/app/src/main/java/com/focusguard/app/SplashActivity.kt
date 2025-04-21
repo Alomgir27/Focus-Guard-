@@ -117,23 +117,8 @@ class SplashActivity : AppCompatActivity() {
     }
     
     private fun createAccessibilityReminderChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Accessibility Permission Reminders"
-            val description = "Notifications to remind you to enable required permissions"
-            val importance = NotificationManager.IMPORTANCE_HIGH
-            
-            val channel = NotificationChannel(
-                ACCESSIBILITY_REMINDER_CHANNEL_ID,
-                name,
-                importance
-            ).apply {
-                this.description = description
-            }
-            
-            // Register the channel with the system
-            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
-        }
+        // This function is intentionally left empty to prevent creating notification channels
+        // for accessibility permission reminders
     }
     
     private fun proceedToMainActivity(delayMillis: Long = 0) {

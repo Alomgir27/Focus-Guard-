@@ -12,6 +12,7 @@ import com.focusguard.app.data.entity.RoutineItem
 import com.focusguard.app.data.repository.DailyRoutineRepository
 import com.focusguard.app.util.RoutineGenerator
 import com.focusguard.app.util.RoutineScheduler
+import com.focusguard.app.util.RoutineNotificationScheduler
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -25,6 +26,7 @@ class DailyRoutineViewModel(application: Application) : AndroidViewModel(applica
     private val routineGenerator = MyApplication.routineGenerator
     private val routineScheduler = MyApplication.getRoutineScheduler()
     private val dailyRoutineDao = MyApplication.database.dailyRoutineDao()
+    private val routineNotificationScheduler = RoutineNotificationScheduler(application)
     
     // LiveData for the current active routine
     private val _currentRoutine = MutableLiveData<DailyRoutine?>()
@@ -231,13 +233,25 @@ class DailyRoutineViewModel(application: Application) : AndroidViewModel(applica
      */
     fun updateRoutineItem(routineId: Int, updatedItem: RoutineItem) {
         viewModelScope.launch {
+            _isLoading.postValue(true)
+            
             try {
+                // Update in repository
                 dailyRoutineRepository.updateRoutineItem(routineId, updatedItem)
-                // Refresh the routine
-                loadTodayRoutine()
-                _error.postValue(null)
+                
+                // Get the updated routine and update the UI
+                val updatedRoutine = dailyRoutineRepository.getRoutineById(routineId)
+                if (updatedRoutine != null) {
+                    _currentRoutine.postValue(updatedRoutine)
+                    
+                    // Reschedule notifications after update
+                    scheduleRoutineNotifications(updatedRoutine)
+                }
             } catch (e: Exception) {
-                _error.postValue("Error updating item: ${e.message}")
+                Log.e("DailyRoutineViewModel", "Error updating routine item: ${e.message}", e)
+                _error.postValue("Error updating routine item: ${e.message}")
+            } finally {
+                _isLoading.postValue(false)
             }
         }
     }
@@ -285,27 +299,47 @@ class DailyRoutineViewModel(application: Application) : AndroidViewModel(applica
                     
                     val newId = dailyRoutineRepository.insert(newRoutine)
                     Log.d("DailyRoutineViewModel", "Created new routine with ID: $newId")
+                    
+                    // Set it as the current routine
+                    val addedRoutine = newRoutine.copy(id = newId.toInt())
+                    _currentRoutine.postValue(addedRoutine)
+                    
+                    // Schedule notifications for the new routine
+                    scheduleRoutineNotifications(addedRoutine)
+                    
+                    // Deactivate other routines
+                    dailyRoutineRepository.deactivateOtherRoutines(newId.toInt())
                 } else {
-                    // Add to existing routine
+                    // Add the item to the existing routine
                     Log.d("DailyRoutineViewModel", "Adding item to existing routine with ID: ${currentRoutine.id}")
-                    try {
-                        dailyRoutineRepository.addRoutineItem(currentRoutine.id, newItem)
-                        Log.d("DailyRoutineViewModel", "Successfully added item to routine")
-                    } catch (e: Exception) {
-                        Log.e("DailyRoutineViewModel", "Error adding item to routine: ${e.message}", e)
-                        throw e
-                    }
+                    
+                    // Create a new list with all existing items plus the new one
+                    val updatedItems = ArrayList(currentRoutine.items)
+                    updatedItems.add(newItem)
+                    
+                    // Sort the items by start time
+                    val sortedItems = updatedItems.sortedWith(compareBy { it.startTime })
+                    
+                    // Create updated routine
+                    val updatedRoutine = currentRoutine.copy(
+                        items = sortedItems,
+                        lastModifiedAt = LocalDateTime.now()
+                    )
+                    
+                    // Save to database
+                    dailyRoutineRepository.update(updatedRoutine)
+                    Log.d("DailyRoutineViewModel", "Updated routine with ${updatedRoutine.items.size} items")
+                    
+                    // Update current routine in the UI
+                    _currentRoutine.postValue(updatedRoutine)
+                    
+                    // Schedule notifications for the updated routine
+                    scheduleRoutineNotifications(updatedRoutine)
                 }
-                
-                // Refresh the routine
-                Log.d("DailyRoutineViewModel", "Reloading today's routine after adding item")
-                loadTodayRoutine()
-                _error.postValue(null)
-                
-                Log.d("DailyRoutineViewModel", "Current routine now has ${_currentRoutine.value?.items?.size ?: 0} items")
             } catch (e: Exception) {
-                Log.e("DailyRoutineViewModel", "Error adding item: ${e.message}", e)
-                _error.postValue("Error adding item: ${e.message}")
+                Log.e("DailyRoutineViewModel", "Error adding routine item: ${e.message}", e)
+                _error.postValue("Error adding routine item: ${e.message}")
+                throw e
             } finally {
                 _isLoading.postValue(false)
             }
@@ -568,5 +602,23 @@ class DailyRoutineViewModel(application: Application) : AndroidViewModel(applica
                 _isLoading.postValue(false)
             }
         }
+    }
+    
+    /**
+     * Schedule notifications for a routine
+     */
+    private fun scheduleRoutineNotifications(routine: DailyRoutine) {
+        // Only schedule notifications for active routines
+        if (!routine.isActive) {
+            Log.d("DailyRoutineViewModel", "Not scheduling notifications for inactive routine: ${routine.id}")
+            return
+        }
+        
+        // Cancel existing notifications for this routine first
+        routineNotificationScheduler.cancelExistingNotifications(routine.id)
+        
+        // Schedule new notifications
+        routineNotificationScheduler.scheduleNotificationsForRoutine(routine)
+        Log.d("DailyRoutineViewModel", "Scheduled notifications for routine ID: ${routine.id} with ${routine.items.size} items")
     }
 } 

@@ -12,7 +12,6 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.focusguard.app.data.entity.NotificationType
 import com.focusguard.app.workers.NotificationWorker
-import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
@@ -23,77 +22,75 @@ class NotificationScheduler(private val context: Context) {
     companion object {
         private const val TAG = "NotificationScheduler"
         
-        // Work names for different notification types
-        private const val WORK_MOTIVATION = "motivation_notification"
-        private const val WORK_HABIT_REMINDER = "habit_reminder_notification"
-        private const val WORK_RELIGIOUS = "religious_notification"
-        private const val WORK_INSIGHTS = "insights_notification"
-        private const val WORK_GENERAL = "general_notification"
+        // Work name for general notifications
+        private const val WORK_NOTIFICATION = "simple_notification"
         
         // Default notification times (can be customized by user preferences)
         private val DEFAULT_MORNING_TIME = LocalTime.of(8, 0)
-        private val DEFAULT_MIDDAY_TIME = LocalTime.of(12, 30)
         private val DEFAULT_EVENING_TIME = LocalTime.of(19, 0)
-        
-        // Notification frequencies
-        private const val RELIGIOUS_QUOTE_FREQUENCY_DAYS = 1L  // Daily
-        private const val MOTIVATION_FREQUENCY_DAYS = 1L       // Daily
-        private const val INSIGHT_FREQUENCY_DAYS = 2L          // Every other day
-        private const val HABIT_REMINDER_FREQUENCY_HOURS = 8L  // 3 times a day
     }
     
     private val workManager = WorkManager.getInstance(context)
     
     /**
-     * Schedule all notification types according to a daily plan
+     * Schedule all notifications according to frequency settings
      */
     fun scheduleAllNotifications() {
-        Log.d(TAG, "Scheduling all notification types")
+        Log.d(TAG, "Scheduling notifications based on frequency")
         
-        // Cancel existing work
-        workManager.cancelUniqueWork(WORK_MOTIVATION)
-        workManager.cancelUniqueWork(WORK_HABIT_REMINDER)
-        workManager.cancelUniqueWork(WORK_RELIGIOUS)
-        workManager.cancelUniqueWork(WORK_INSIGHTS)
-        workManager.cancelUniqueWork(WORK_GENERAL)
+        // Cancel existing scheduled notifications
+        workManager.cancelUniqueWork(WORK_NOTIFICATION)
         
-        // Schedule morning notifications
-        scheduleNotificationAtTime(
-            NotificationType.RELIGIOUS_QUOTE,
-            DEFAULT_MORNING_TIME,
-            WORK_RELIGIOUS
-        )
+        // Get user preferences
+        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean("enable_notifications", true)
         
-        // Schedule midday notifications
-        scheduleNotificationAtTime(
-            NotificationType.MOTIVATION,
-            DEFAULT_MIDDAY_TIME,
-            WORK_MOTIVATION
-        )
+        if (!enabled) {
+            Log.d(TAG, "Notifications are disabled, not scheduling")
+            return
+        }
         
-        // Schedule evening notifications
-        scheduleNotificationAtTime(
-            NotificationType.HABIT_REMINDER,
-            DEFAULT_EVENING_TIME,
-            WORK_HABIT_REMINDER
-        )
+        // Load the morning and evening times
+        val morningHour = prefs.getInt("morning_hour", DEFAULT_MORNING_TIME.hour)
+        val morningMinute = prefs.getInt("morning_minute", DEFAULT_MORNING_TIME.minute)
+        val eveningHour = prefs.getInt("evening_hour", DEFAULT_EVENING_TIME.hour)
+        val eveningMinute = prefs.getInt("evening_minute", DEFAULT_EVENING_TIME.minute)
         
-        // Schedule insights on alternating days
-        schedulePeriodicNotification(
-            NotificationType.INSIGHT,
-            INSIGHT_FREQUENCY_DAYS,
-            TimeUnit.DAYS,
-            WORK_INSIGHTS
-        )
+        val morningTime = LocalTime.of(morningHour, morningMinute)
+        val eveningTime = LocalTime.of(eveningHour, eveningMinute)
         
-        Log.d(TAG, "All notifications scheduled")
+        // Get frequency setting
+        val frequency = prefs.getInt("notification_frequency", 2)
+        
+        // Schedule based on frequency
+        when (frequency) {
+            1 -> { // Low: Morning only
+                scheduleNotificationAtTime(morningTime, "morning_notification")
+            }
+            2 -> { // Medium: Morning and evening
+                scheduleNotificationAtTime(morningTime, "morning_notification")
+                scheduleNotificationAtTime(eveningTime, "evening_notification")
+            }
+            3 -> { // High: Morning, midday and evening
+                scheduleNotificationAtTime(morningTime, "morning_notification")
+                scheduleNotificationAtTime(LocalTime.of(13, 0), "midday_notification")
+                scheduleNotificationAtTime(eveningTime, "evening_notification")
+            }
+            4 -> { // Very high: Four times per day
+                scheduleNotificationAtTime(morningTime, "morning_notification")
+                scheduleNotificationAtTime(LocalTime.of(11, 0), "mid_morning_notification")
+                scheduleNotificationAtTime(LocalTime.of(15, 0), "afternoon_notification")
+                scheduleNotificationAtTime(eveningTime, "evening_notification")
+            }
+        }
+        
+        Log.d(TAG, "Scheduled $frequency notifications per day")
     }
     
     /**
-     * Schedule a one-time notification at a specific time today
+     * Schedule a one-time notification at a specific time
      */
-    fun scheduleNotificationAtTime(
-        notificationType: NotificationType,
+    private fun scheduleNotificationAtTime(
         time: LocalTime,
         workName: String
     ) {
@@ -109,10 +106,14 @@ class NotificationScheduler(private val context: Context) {
             )
         }
         
-        Log.d(TAG, "Scheduling $notificationType notification in $delay ms")
+        Log.d(TAG, "Scheduling notification at $time (in $delay ms)")
+        
+        // Randomly select a notification type - we'll let the worker decide what to show
+        val notificationTypes = NotificationType.values()
+        val randomType = notificationTypes[notificationTypes.indices.random()]
         
         val notificationData = Data.Builder()
-            .putString("notification_type", notificationType.name)
+            .putString("notification_type", randomType.name)
             .build()
         
         val constraints = Constraints.Builder()
@@ -133,62 +134,6 @@ class NotificationScheduler(private val context: Context) {
         )
     }
     
-    /**
-     * Schedule a recurring notification with specified frequency
-     */
-    fun schedulePeriodicNotification(
-        notificationType: NotificationType,
-        repeatInterval: Long,
-        timeUnit: TimeUnit,
-        workName: String
-    ) {
-        Log.d(TAG, "Scheduling periodic $notificationType notification every $repeatInterval ${timeUnit.name}")
-        
-        val notificationData = Data.Builder()
-            .putString("notification_type", notificationType.name)
-            .build()
-        
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        
-        val notificationWorkRequest = PeriodicWorkRequestBuilder<NotificationWorker>(
-            repeatInterval, timeUnit
-        )
-            .setConstraints(constraints)
-            .setInputData(notificationData)
-            .addTag(workName)
-            .build()
-        
-        workManager.enqueueUniquePeriodicWork(
-            workName,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            notificationWorkRequest
-        )
-    }
-    
-    /**
-     * Schedule an immediate notification
-     */
-    fun scheduleImmediateNotification(notificationType: NotificationType) {
-        Log.d(TAG, "Scheduling immediate $notificationType notification")
-        
-        val notificationData = Data.Builder()
-            .putString("notification_type", notificationType.name)
-            .build()
-        
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-        
-        val notificationWorkRequest = OneTimeWorkRequestBuilder<NotificationWorker>()
-            .setConstraints(constraints)
-            .setInputData(notificationData)
-            .build()
-        
-        workManager.enqueue(notificationWorkRequest)
-    }
-
     /**
      * Set the notification frequency (how many notifications per day)
      */
@@ -212,7 +157,7 @@ class NotificationScheduler(private val context: Context) {
             .putInt("morning_minute", time.minute)
             .apply()
         
-        // Reschedule the morning notifications
+        // Reschedule the notifications
         scheduleAllNotifications()
     }
 
@@ -227,29 +172,20 @@ class NotificationScheduler(private val context: Context) {
             .putInt("evening_minute", time.minute)
             .apply()
         
-        // Reschedule the evening notifications
+        // Reschedule the notifications
         scheduleAllNotifications()
     }
-
+    
     /**
-     * Enable or disable a specific notification type
+     * Cancel all scheduled notifications
      */
-    fun setNotificationTypeEnabled(type: NotificationType, enabled: Boolean) {
-        Log.d(TAG, "Setting notification type $type enabled=$enabled")
-        
-        val prefKey = when (type) {
-            NotificationType.MOTIVATION -> "enable_motivational"
-            NotificationType.HABIT_REMINDER -> "enable_habit_reminders"
-            NotificationType.RELIGIOUS_QUOTE -> "enable_religious_quotes"
-            NotificationType.INSIGHT -> "enable_insights"
-            NotificationType.APP_USAGE_WARNING -> "enable_usage_warnings"
-            NotificationType.GENERAL -> "enable_general"
-        }
-        
-        val prefs = context.getSharedPreferences("notification_settings", Context.MODE_PRIVATE)
-        prefs.edit().putBoolean(prefKey, enabled).apply()
-        
-        // Reschedule notifications with updated settings
-        scheduleAllNotifications()
+    fun cancelAllNotifications() {
+        Log.d(TAG, "Cancelling all scheduled notifications")
+        workManager.cancelAllWorkByTag(WORK_NOTIFICATION)
+        workManager.cancelUniqueWork("morning_notification")
+        workManager.cancelUniqueWork("mid_morning_notification")
+        workManager.cancelUniqueWork("midday_notification")
+        workManager.cancelUniqueWork("afternoon_notification")
+        workManager.cancelUniqueWork("evening_notification")
     }
 } 

@@ -233,9 +233,23 @@ class AppBlockerAccessibilityService : AccessibilityService() {
                         wakeLock.acquire(30000) // 30 seconds max
                     }
                     
-                    // Update the notification silently - keep it minimal
+                    // Update the notification
                     val updatedNotification = createNotification()
                     val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    
+                    // Ensure notification channel is consistent
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val channel = notificationManager.getNotificationChannel(CHANNEL_ID)
+                        if (channel != null) {
+                            // Make sure sound and vibration stay disabled
+                            if (channel.importance > NotificationManager.IMPORTANCE_LOW) {
+                                channel.setSound(null, null)
+                                channel.enableVibration(false)
+                                notificationManager.createNotificationChannel(channel)
+                            }
+                        }
+                    }
+                    
                     notificationManager.notify(NOTIFICATION_ID, updatedNotification)
                     
                     // Check if we should update our blocked apps list
@@ -1037,11 +1051,11 @@ class AppBlockerAccessibilityService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Focus Guard Service",  // Non-empty name required by Android
-                NotificationManager.IMPORTANCE_MIN
+                "FocusGuard Service",  // Proper channel name
+                NotificationManager.IMPORTANCE_LOW  // Use LOW instead of MIN for better visibility
             ).apply {
-                description = "Background service notification"  // Non-empty description
-                setShowBadge(false)
+                description = "FocusGuard is actively monitoring apps"
+                setShowBadge(false)  // Don't show badge on app icon
                 enableLights(false)
                 enableVibration(false)
                 setSound(null, null)
@@ -1057,24 +1071,21 @@ class AppBlockerAccessibilityService : AccessibilityService() {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
-        // Create a "View" button intent that goes to MainActivity
-        val viewButtonIntent = PendingIntent.getActivity(
-            this, 1, notificationIntent, PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Focus Guard")  // Non-empty title
-            .setContentText("Running in background")  // Non-empty text
-            .setSmallIcon(android.R.drawable.ic_lock_lock)  // Use a system icon instead
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setVisibility(NotificationCompat.VISIBILITY_SECRET)  // Hide from lock screen
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("FocusGuard Active")  // Clear, informative title
+            .setContentText("Helping you stay productive")  // Simple, positive subtitle
+            .setSmallIcon(R.drawable.logo2)  // Use the proper app logo
+            .setPriority(NotificationCompat.PRIORITY_LOW)  // Lower priority but still visible
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)  // Show on lock screen but hide details
             .setShowWhen(false)  // Don't show timestamp
             .setSilent(true)  // Silent notification
             .setOngoing(true)  // Required for foreground service
-            .setContentIntent(pendingIntent)
-            // Add a View button to the notification
-            .addAction(android.R.drawable.ic_menu_view, "View", viewButtonIntent)
-            .build()
+            .setContentIntent(pendingIntent)  // Open app when tapped
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setStyle(NotificationCompat.BigTextStyle()
+                .bigText("Your productivity assistant is active"))
+            
+        return builder.build()
     }
     
     private fun applyImmediateForceBlock(packageName: String) {

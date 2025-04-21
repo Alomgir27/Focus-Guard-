@@ -112,22 +112,31 @@ class AppListAdapter(
                         MyApplication.appBlockRepository.getBlockedApp(app.packageName)
                     }
 
-                    if (blockedApp != null && !blockedApp.password.isNullOrEmpty()) {
-                        // App has a password, show password dialog
-                        showPasswordDialog(context, app, blockedApp.password)
-                    } else {
-                        // No password set, proceed with unblock directly
+                    if (blockedApp == null) {
+                        // App is not in blocked list, proceed with unblock directly
+                        onAppBlocked(app, false)
+                        return@launch
+                    }
+
+                    // Check if the app is within its blocking schedule
+                    val isWithinBlockTime = withContext(Dispatchers.IO) {
+                        MyApplication.appBlockRepository.shouldBlockAppNow(app.packageName)
+                    }
+
+                    if (blockedApp.password.isNullOrEmpty() || !isWithinBlockTime) {
+                        // No password set OR app is outside its scheduled block time
+                        // In both cases, proceed with unblock directly without password check
                         withContext(Dispatchers.IO) {
                             // Create a BlockedAppEntity object with isActive = false
                             val updatedApp = BlockedAppEntity(
                                 packageName = app.packageName,
                                 appName = app.appName,
                                 isActive = false,
-                                startTime = blockedApp?.startTime,
-                                endTime = blockedApp?.endTime,
-                                blockAllDay = blockedApp?.blockAllDay ?: false,
-                                enabledDays = blockedApp?.enabledDays ?: 127,
-                                password = blockedApp?.password
+                                startTime = blockedApp.startTime,
+                                endTime = blockedApp.endTime,
+                                blockAllDay = blockedApp.blockAllDay,
+                                enabledDays = blockedApp.enabledDays,
+                                password = blockedApp.password
                             )
                             // Update the app's status in the database
                             MyApplication.appBlockRepository.insertBlockedApp(updatedApp)
@@ -136,6 +145,14 @@ class AppListAdapter(
                             context.sendBroadcast(intent)
                         }
                         onAppBlocked(app, false)
+                        
+                        // If bypassing password because outside block time, show a toast
+                        if (!blockedApp.password.isNullOrEmpty() && !isWithinBlockTime) {
+                            Toast.makeText(context, "App unblocked - outside scheduled block time", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // App has a password AND is within block time, show password dialog
+                        showPasswordDialog(context, app, blockedApp.password)
                     }
                 } catch (e: Exception) {
                     Log.e("AppListAdapter", "Error checking password: ${e.message}", e)

@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 import kotlin.random.Random
+import java.time.temporal.ChronoUnit
 
 class RoutineGenerator(
     private val context: Context,
@@ -334,7 +335,7 @@ class RoutineGenerator(
                 )
                 if (aiGeneratedItems.isNotEmpty()) {
                     Log.d(TAG, "Successfully generated ${aiGeneratedItems.size} routine items using AI")
-                    return aiGeneratedItems
+                    return validateAndFixRoutineTimeline(aiGeneratedItems, date, wakeupTime, sleepTime)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error generating routine with AI: ${e.message}", e)
@@ -384,6 +385,11 @@ class RoutineGenerator(
                 currentTime = currentTime.plusMinutes(60)
             }
             
+            // Make sure we don't schedule focus time beyond sleep time
+            if (currentTime.plusMinutes(minutesPerFocusBlock.toLong()).isAfter(sleepTime)) {
+                break
+            }
+            
             // Add focus block
             routineItems.add(createRoutineItem(
                 "Focus Time $i", 
@@ -394,8 +400,8 @@ class RoutineGenerator(
                 priority = 3
             ))
             
-            // Add short break (unless it's the last block)
-            if (i < focusBlocksNeeded) {
+            // Add short break (unless it's the last block or would exceed sleep time)
+            if (i < focusBlocksNeeded && !currentTime.plusMinutes((minutesPerFocusBlock + breakMinutes).toLong()).isAfter(sleepTime)) {
                 routineItems.add(createRoutineItem(
                     "Short Break", 
                     "Take a short break to refresh",
@@ -410,19 +416,56 @@ class RoutineGenerator(
             }
         }
         
+        // Add afternoon activities if there's a gap before dinner
+        if (currentTime.plusMinutes(60) < LocalTime.of(17, 0) && LocalTime.of(17, 0).isBefore(sleepTime)) {
+            routineItems.add(createRoutineItem(
+                "Afternoon Activities",
+                "Time for personal projects or errands",
+                date.atTime(currentTime),
+                date.atTime(LocalTime.of(17, 0)),
+                priority = 2
+            ))
+            currentTime = LocalTime.of(17, 0)
+        }
+        
         // Add dinner if it fits before sleep time
         if (currentTime.plusMinutes(60) < sleepTime) {
             val dinnerTime = if (currentTime.hour < 18) LocalTime.of(18, 0) else currentTime
             
+            // Make sure dinner time is not after sleep time
+            if (dinnerTime.plusMinutes(60).isBefore(sleepTime)) {
+                routineItems.add(createRoutineItem(
+                    "Dinner", 
+                    "Evening meal",
+                    date.atTime(dinnerTime),
+                    date.atTime(dinnerTime.plusMinutes(60)),
+                    priority = 2
+                ))
+                
+                currentTime = dinnerTime.plusMinutes(60)
+            } else {
+                // If dinner would go past sleep time, adjust it
+                routineItems.add(createRoutineItem(
+                    "Dinner", 
+                    "Evening meal",
+                    date.atTime(currentTime),
+                    date.atTime(currentTime.plusMinutes(Math.min(60, ChronoUnit.MINUTES.between(currentTime, sleepTime.minusMinutes(60))))),
+                    priority = 2
+                ))
+                
+                currentTime = currentTime.plusMinutes(Math.min(60, ChronoUnit.MINUTES.between(currentTime, sleepTime.minusMinutes(60))))
+            }
+        }
+        
+        // Fill any remaining gap before evening routine
+        if (currentTime.isBefore(sleepTime.minusMinutes(60)) && ChronoUnit.MINUTES.between(currentTime, sleepTime.minusMinutes(60)) > 30) {
             routineItems.add(createRoutineItem(
-                "Dinner", 
-                "Evening meal",
-                date.atTime(dinnerTime),
-                date.atTime(dinnerTime.plusMinutes(60)),
-                priority = 2
+                "Evening Free Time", 
+                "Relax and wind down with activities you enjoy",
+                date.atTime(currentTime),
+                date.atTime(sleepTime.minusMinutes(60)),
+                priority = 1
             ))
-            
-            currentTime = dinnerTime.plusMinutes(60)
         }
         
         // Add evening routine
@@ -444,7 +487,78 @@ class RoutineGenerator(
             processTask(task, routineItems, date, wakeupTime, sleepTime)
         }
         
-        return routineItems.sortedWith(compareBy { it.startTime })
+        // Sort items by start time and validate the timeline
+        return validateAndFixRoutineTimeline(routineItems.sortedWith(compareBy { it.startTime }), date, wakeupTime, sleepTime)
+    }
+    
+    /**
+     * Validate and fix routine timeline to ensure no large gaps
+     */
+    private fun validateAndFixRoutineTimeline(
+        routineItems: List<RoutineItem>, 
+        date: LocalDate,
+        wakeupTime: LocalTime,
+        sleepTime: LocalTime
+    ): List<RoutineItem> {
+        if (routineItems.isEmpty()) {
+            return routineItems
+        }
+        
+        // Sort items by start time
+        val sortedItems = routineItems.sortedBy { it.startTime }
+        val result = mutableListOf<RoutineItem>()
+        
+        // Add all items and check for gaps
+        for (i in sortedItems.indices) {
+            val item = sortedItems[i]
+            result.add(item)
+            
+            // Check if there's a gap of more than 30 minutes to the next item
+            if (i < sortedItems.size - 1) {
+                val nextItem = sortedItems[i + 1]
+                val gap = ChronoUnit.MINUTES.between(item.endTime, nextItem.startTime)
+                
+                if (gap > 30) {
+                    // Add a filler item
+                    result.add(createRoutineItem(
+                        "Free Time",
+                        "Time to take a break or work on personal tasks",
+                        item.endTime,
+                        nextItem.startTime,
+                        priority = 1
+                    ))
+                }
+            }
+        }
+        
+        // Ensure the routine covers from wake-up to sleep time
+        val firstItem = result.first()
+        val lastItem = result.last()
+        
+        // If the routine doesn't start at wake-up time, add a morning item
+        if (firstItem.startTime.toLocalTime().isAfter(wakeupTime)) {
+            result.add(0, createRoutineItem(
+                "Morning Start",
+                "Begin your day with intention",
+                date.atTime(wakeupTime),
+                firstItem.startTime,
+                priority = 2
+            ))
+        }
+        
+        // If the routine doesn't end at sleep time, add an evening item
+        if (lastItem.endTime.toLocalTime().isBefore(sleepTime)) {
+            result.add(createRoutineItem(
+                "Evening Wind Down",
+                "Prepare for restful sleep",
+                lastItem.endTime,
+                date.atTime(sleepTime),
+                priority = 2
+            ))
+        }
+        
+        // Sort again after adding any filler items
+        return result.sortedBy { it.startTime }
     }
     
     /**
@@ -461,7 +575,18 @@ class RoutineGenerator(
         try {
             // Import required classes
             val apiKeyManager = ApiKeyManager(context)
-            val apiKey = apiKeyManager.getCurrentApiKey()
+            var apiKey: String? = null
+            
+            try {
+                apiKey = apiKeyManager.getCurrentApiKey()
+                if (apiKey.isNullOrBlank()) {
+                    Log.e(TAG, "Failed to get valid API key - no key available")
+                    throw Exception("No valid API key available")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error retrieving API key: ${e.message}", e)
+                throw Exception("API key error: ${e.message}")
+            }
             
             // Create a structured prompt for the AI
             val prompt = buildAIPrompt(
@@ -493,6 +618,7 @@ class RoutineGenerator(
                 3. Limit your response to 8-12 routine items to ensure it fits within response limits.
                 4. ONLY respond with valid JSON. No explanatory text before or after.
                 5. FOLLOW USER INSTRUCTIONS PRECISELY. If they specify language, activities, or preferences, prioritize these.
+                6. Ensure there are no large gaps in the timeline - cover the whole day from wake to sleep time.
             """.trimIndent()
             
             // Create request object with increased max_tokens
@@ -503,24 +629,75 @@ class RoutineGenerator(
                     com.focusguard.app.api.models.Message("user", prompt)
                 ),
                 temperature = 0.7,
-                max_tokens = 1000 // Increased from 500 to 1000
+                max_tokens = 1500 // Increased from 1000 to 1500 for more comprehensive routines
             )
             
+            Log.d(TAG, "Sending AI request for routine generation with prompt length: ${prompt.length}")
+            
             // Call the OpenAI API to generate routine
-            val result = com.focusguard.app.api.OpenAIClient.getInstance()
-                .createChatCompletion(apiKey, request)
+            val result = try {
+                com.focusguard.app.api.OpenAIClient.getInstance()
+                    .createChatCompletion(apiKey, request)
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception during API call: ${e.message}", e)
+                // Check if this is a token/authentication issue
+                if (e.message?.contains("authentication") == true || 
+                    e.message?.contains("auth") == true || 
+                    e.message?.contains("key") == true || 
+                    e.message?.contains("token") == true ||
+                    e.message?.contains("401") == true ||
+                    e.message?.contains("403") == true) {
+                    // Try to rotate the API key and retry once
+                    Log.w(TAG, "API key issue detected, trying to rotate keys")
+                    apiKeyManager.rotateToNextKey()
+                    val newKey = apiKeyManager.getCurrentApiKey()
+                    if (!newKey.isNullOrBlank() && newKey != apiKey) {
+                        Log.d(TAG, "Retrying with new API key")
+                        com.focusguard.app.api.OpenAIClient.getInstance()
+                            .createChatCompletion(newKey, request)
+                    } else {
+                        throw Exception("Failed to get a new valid API key")
+                    }
+                } else {
+                    throw e
+                }
+            }
             
             if (result.isSuccess) {
                 // Record API usage for rotation tracking
                 apiKeyManager.recordUsage()
                 
                 val content = result.getOrNull() ?: ""
-                Log.d(TAG, "Raw AI response: $content")
+                Log.d(TAG, "AI response received, length: ${content.length}")
+                
+                if (content.isBlank()) {
+                    Log.e(TAG, "Empty response from AI")
+                    return emptyList()
+                }
                 
                 // Parse the JSON response into routine items
-                return parseAIResponse(content, date)
+                val routineItems = parseAIResponse(content, date)
+                
+                if (routineItems.isEmpty()) {
+                    Log.e(TAG, "Failed to parse any routine items from AI response")
+                }
+                
+                return routineItems
             } else {
-                Log.e(TAG, "Error from AI: ${result.exceptionOrNull()?.message}")
+                val exception = result.exceptionOrNull()
+                Log.e(TAG, "Error from AI: ${exception?.message}", exception)
+                
+                // Check if this is a token-related error and try to rotate the key
+                if (exception?.message?.contains("authentication") == true || 
+                    exception?.message?.contains("auth") == true || 
+                    exception?.message?.contains("key") == true || 
+                    exception?.message?.contains("token") == true ||
+                    exception?.message?.contains("401") == true ||
+                    exception?.message?.contains("403") == true) {
+                    Log.w(TAG, "API key issue detected in error response, rotating keys")
+                    apiKeyManager.rotateToNextKey()
+                }
+                
                 return emptyList()
             }
         } catch (e: Exception) {

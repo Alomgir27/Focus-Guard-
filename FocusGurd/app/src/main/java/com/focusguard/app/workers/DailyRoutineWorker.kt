@@ -8,6 +8,7 @@ import androidx.work.WorkerParameters
 import com.focusguard.app.MyApplication
 import com.focusguard.app.data.repository.DailyRoutineRepository
 import com.focusguard.app.util.RoutineGenerator
+import com.focusguard.app.util.RoutineNotificationScheduler
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -33,6 +34,10 @@ class DailyRoutineWorker(
     private val routineGenerator: RoutineGenerator by lazy {
         MyApplication.routineGenerator
     }
+
+    private val routineNotificationScheduler: RoutineNotificationScheduler by lazy {
+        RoutineNotificationScheduler(applicationContext)
+    }
     
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting DailyRoutineWorker")
@@ -57,6 +62,10 @@ class DailyRoutineWorker(
             
             // Generate the routine
             val routine = routineGenerator.generateRoutine(tomorrow, userPreferences)
+            
+            // Schedule notifications for the generated routine
+            routineNotificationScheduler.scheduleNotificationsForRoutine(routine)
+            Log.d(TAG, "Scheduled notifications for tomorrow's routine with ${routine.items.size} items")
             
             // Record successful generation
             prefs.edit().putString(LAST_GENERATION_DATE_KEY, todayStr).apply()

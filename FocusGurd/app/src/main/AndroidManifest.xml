@@ -118,12 +118,6 @@
                 tools:replace="android:value" />
         </provider>
 
-        <!-- Overlay Notification Service -->
-        <service
-            android:name=".service.OverlayNotificationService"
-            android:enabled="true"
-            android:exported="false" />
-
     </application>
 
 </manifest>

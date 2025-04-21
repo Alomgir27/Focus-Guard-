@@ -273,79 +273,107 @@ class AppBlockerService : AccessibilityService() {
     }
     
     /**
-     * Display blocking overlay
+     * Show blocking screen for an app
      */
     private fun showBlockingScreen(packageName: String) {
-        try {
-            // If we already have a blocking view for this package, just make sure it's working
-            if (blockingView != null && currentBlockedPackage == packageName) {
-                // Force return to home screen to prevent app access
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                return
-            }
-            
-            // Clean up any existing blocking view
-            hideBlockingScreen()
-            
-            // Get app name
-            val appName = try {
-                packageManager.getApplicationLabel(
-                    packageManager.getApplicationInfo(packageName, 0)
-                ).toString()
+        // First check if the app should be blocked based on current time
+        serviceScope.launch {
+            try {
+                // Check if app is actually within its blocking schedule
+                val shouldBlockNow = appBlockRepository.shouldBlockAppNow(packageName)
+                
+                if (!shouldBlockNow) {
+                    Log.d(TAG, "Not showing blocking screen for $packageName - outside scheduled block time")
+                    
+                    // If there's an existing blocking screen, hide it
+                    if (blockingView != null && currentBlockedPackage == packageName) {
+                        hideBlockingScreen()
+                        
+                        // Show a toast to inform user
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(applicationContext, "App unblocked - outside scheduled block time", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    
+                    return@launch
+                }
+                
+                // Continue with showing blocking screen - app is within block time
+                withContext(Dispatchers.Main) {
+                    try {
+                        // If we already have a blocking view for this package, just make sure it's working
+                        if (blockingView != null && currentBlockedPackage == packageName) {
+                            // Force return to home screen to prevent app access
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                            return@withContext
+                        }
+                        
+                        // Clean up any existing blocking view
+                        hideBlockingScreen()
+                        
+                        // Get app name
+                        val appName = try {
+                            packageManager.getApplicationLabel(
+                                packageManager.getApplicationInfo(packageName, 0)
+                            ).toString()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error getting app name: ${e.message}")
+                            packageName
+                        }
+                        
+                        // Set the current blocked package
+                        currentBlockedPackage = packageName
+                        lastBlockedApp = packageName
+                        blockingActive = true
+                        
+                        Log.d(TAG, "Showing blocking screen for $appName ($packageName)")
+                        writeLog("Showing blocking screen for $appName ($packageName)")
+                        
+                        // Create the blocking view
+                        val inflater = LayoutInflater.from(applicationContext)
+                        blockingView = inflater.inflate(R.layout.view_app_blocked, null)
+                        
+                        // Setup blocking view elements
+                        setupBlockingView(blockingView!!, appName, packageName)
+                        
+                        // Apply window parameters with improved flags for EFFECTIVE blocking
+                        val params = WindowManager.LayoutParams(
+                            WindowManager.LayoutParams.MATCH_PARENT,
+                            WindowManager.LayoutParams.MATCH_PARENT,
+                            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+                            WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                            WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                            WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE,
+                            PixelFormat.OPAQUE
+                        )
+                        params.alpha = 1.0f
+                        params.screenBrightness = 1.0f
+                        
+                        // Add view to window
+                        windowManager.addView(blockingView, params)
+                        
+                        // Force return to home screen to prevent using the blocked app
+                        performGlobalAction(GLOBAL_ACTION_HOME)
+                        performGlobalAction(GLOBAL_ACTION_BACK)
+                        
+                        // Start a more aggressive monitoring to ensure app remains blocked
+                        startStrictBlockingMonitor(packageName)
+                        
+                        Log.d(TAG, "Blocking screen shown for $packageName")
+                        writeLog("Blocking screen shown for $packageName")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error showing blocking screen: ${e.message}", e)
+                        writeLog("ERROR showing blocking screen: ${e.message}")
+                    }
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error getting app name: ${e.message}")
-                packageName
+                Log.e(TAG, "Error checking if app should be blocked before showing blocking screen: ${e.message}", e)
             }
-            
-            // Set the current blocked package
-            currentBlockedPackage = packageName
-            lastBlockedApp = packageName
-            blockingActive = true
-            
-            Log.d(TAG, "Showing blocking screen for $appName ($packageName)")
-            writeLog("Showing blocking screen for $appName ($packageName)")
-            
-            // Create the blocking view
-            val inflater = LayoutInflater.from(this)
-            blockingView = inflater.inflate(R.layout.view_app_blocked, null)
-            
-            // Setup blocking view elements
-            setupBlockingView(blockingView!!, appName, packageName)
-            
-            // Apply window parameters with improved flags for EFFECTIVE blocking
-            val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
-                WindowManager.LayoutParams.FLAG_FULLSCREEN or
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE,
-                PixelFormat.OPAQUE
-            )
-            params.alpha = 1.0f
-            params.screenBrightness = 1.0f
-            
-            // Add view to window
-            windowManager.addView(blockingView, params)
-            
-            // Force return to home screen to prevent using the blocked app
-            performGlobalAction(GLOBAL_ACTION_HOME)
-            performGlobalAction(GLOBAL_ACTION_BACK)
-            
-            // Start a more aggressive monitoring to ensure app remains blocked
-            startStrictBlockingMonitor(packageName)
-            
-            Log.d(TAG, "Blocking screen shown for $packageName")
-            writeLog("Blocking screen shown for $packageName")
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Error showing blocking screen: ${e.message}", e)
-            writeLog("ERROR showing blocking screen: ${e.message}")
         }
     }
     
@@ -452,136 +480,194 @@ class AppBlockerService : AccessibilityService() {
      * Show dialog to enter password for unblocking
      */
     private fun showPasswordDialog(packageName: String) {
-        val appInfo = getBlockedAppInfo(packageName)
-        
-        // Create the password dialog view
-        val view = LayoutInflater.from(applicationContext).inflate(R.layout.password_entry_dialog, null)
-        val passwordEditText = view.findViewById<EditText>(R.id.password_input)
-        val titleText = view.findViewById<TextView>(R.id.password_title)
-        val submitButton = view.findViewById<android.widget.Button>(R.id.submit_button)
-        val cancelButton = view.findViewById<android.widget.Button>(R.id.cancel_button)
-        
-        titleText.text = "Enter password to unblock ${appInfo.appName}"
-        
-        // Create window parameters to allow input focus
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-            WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
-            android.graphics.PixelFormat.TRANSLUCENT
-        )
-        params.gravity = Gravity.CENTER
-        
-        // Add the view to the window manager
-        windowManager.addView(view, params)
-        
-        // Request focus for the edit text and show keyboard
-        passwordEditText.requestFocus()
-        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        imm.showSoftInput(passwordEditText, InputMethodManager.SHOW_IMPLICIT)
-        
-        submitButton.setOnClickListener {
-            val password = passwordEditText.text.toString()
-            if (password.isNotEmpty()) {
-                serviceScope.launch {
-                    try {
-                        val isPasswordCorrect = appBlockRepository.verifyPassword(packageName, password)
-                        
-                        withContext(Dispatchers.Main) {
-                            // First close dialog
-                            try {
-                                windowManager.removeView(view)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Error removing password dialog: ${e.message}")
-                            }
-                            
-                            if (isPasswordCorrect) {
-                                // Password correct, unblock the app
-                                Toast.makeText(applicationContext, "Password correct! Unblocking app.", Toast.LENGTH_SHORT).show()
-                                
-                                // Update the app's status
-                                serviceScope.launch {
-                                    try {
-                                        // Get current app info
-                                        val currentApp = appBlockRepository.getBlockedApp(packageName)
-                                        
-                                        // Create a BlockedApp object with isActive = false
-                                        val updatedApp = BlockedAppEntity(
-                                            packageName = packageName,
-                                            appName = appInfo.appName,
-                                            isActive = false,
-                                            startTime = currentApp?.startTime,
-                                            endTime = currentApp?.endTime,
-                                            blockAllDay = currentApp?.blockAllDay ?: false,
-                                            enabledDays = currentApp?.enabledDays ?: 127,
-                                            password = currentApp?.password
-                                        )
-                                        
-                                        // Update the app's status in the database
-                                        appBlockRepository.insertBlockedApp(updatedApp)
-                                        
-                                        // Broadcast the change
-                                        val intent = Intent("com.focusguard.app.ACTION_RELOAD_BLOCKED_APPS")
-                                        applicationContext.sendBroadcast(intent)
-                                        updateBlockedAppsList(immediate = true)
-                                        
-                                        // Hide the blocking screen
-                                        hideBlockingScreen()
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Error updating app status: ${e.message}")
-                                    }
-                                }
-                            } else {
-                                // Password incorrect
-                                Toast.makeText(applicationContext, "Incorrect password. Please try again.", Toast.LENGTH_SHORT).show()
-                                
-                                // Force return to home screen
-                                performGlobalAction(GLOBAL_ACTION_HOME)
-                                performGlobalAction(GLOBAL_ACTION_BACK)
-                                
-                                // Then re-show blocking screen
-                                showBlockingScreen(packageName)
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error verifying password: ${e.message}", e)
-                        Toast.makeText(applicationContext, "Error verifying password: ${e.message}", Toast.LENGTH_SHORT).show()
-                        
-                        // Remove view and return to home on error
+        // First check if the app should be blocked at the current time based on schedule
+        serviceScope.launch {
+            try {
+                val blockedApp = appBlockRepository.getBlockedApp(packageName)
+                
+                if (blockedApp == null) {
+                    Log.d(TAG, "showPasswordDialog: App $packageName is not in the blocked list")
+                    return@launch
+                }
+                
+                // Check if the app is actually within its blocking schedule
+                val isWithinBlockTime = blockedApp.isActive && 
+                    withContext(Dispatchers.Default) {
+                        appBlockRepository.shouldBlockAppNow(packageName)
+                    }
+                
+                // If outside blocking time, automatically unblock without password
+                if (!isWithinBlockTime) {
+                    Log.d(TAG, "Bypassing password for $packageName - outside scheduled block time")
+                    
+                    // Update the app's status
+                    withContext(Dispatchers.IO) {
                         try {
-                            windowManager.removeView(view)
-                        } catch (ex: Exception) {
-                            Log.e(TAG, "Error removing password dialog: ${ex.message}")
+                            // Create updated app with isActive = false
+                            val updatedApp = BlockedAppEntity(
+                                packageName = packageName,
+                                appName = blockedApp.appName,
+                                isActive = false,
+                                startTime = blockedApp.startTime,
+                                endTime = blockedApp.endTime,
+                                blockAllDay = blockedApp.blockAllDay,
+                                enabledDays = blockedApp.enabledDays,
+                                password = blockedApp.password
+                            )
+                            
+                            // Update the app's status in the database
+                            appBlockRepository.insertBlockedApp(updatedApp)
+                            
+                            // Broadcast the change
+                            val intent = Intent("com.focusguard.app.ACTION_RELOAD_BLOCKED_APPS")
+                            applicationContext.sendBroadcast(intent)
+                            updateBlockedAppsList(immediate = true)
+                            
+                            // Hide the blocking screen
+                            withContext(Dispatchers.Main) {
+                                hideBlockingScreen()
+                                Toast.makeText(applicationContext, "App unblocked - outside scheduled block time", Toast.LENGTH_SHORT).show()
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error updating app status: ${e.message}")
                         }
-                        
-                        performGlobalAction(GLOBAL_ACTION_HOME)
-                        showBlockingScreen(packageName)
+                    }
+                    return@launch
+                }
+                
+                // Continue with password dialog if within block time
+                val appInfo = getBlockedAppInfo(packageName)
+                
+                withContext(Dispatchers.Main) {
+                    // Create the password dialog view
+                    val view = LayoutInflater.from(applicationContext).inflate(R.layout.password_entry_dialog, null)
+                    val passwordEditText = view.findViewById<EditText>(R.id.password_input)
+                    val titleText = view.findViewById<TextView>(R.id.password_title)
+                    val submitButton = view.findViewById<android.widget.Button>(R.id.submit_button)
+                    val cancelButton = view.findViewById<android.widget.Button>(R.id.cancel_button)
+                    
+                    titleText.text = "Enter password to unblock ${appInfo.appName}"
+                    
+                    // Create window parameters to allow input focus
+                    val params = WindowManager.LayoutParams(
+                        WindowManager.LayoutParams.MATCH_PARENT,
+                        WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+                        android.graphics.PixelFormat.TRANSLUCENT
+                    )
+                    params.gravity = Gravity.CENTER
+                    
+                    // Add the view to the window manager
+                    windowManager.addView(view, params)
+                    
+                    // Request focus for the edit text and show keyboard
+                    passwordEditText.requestFocus()
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    imm.showSoftInput(passwordEditText, InputMethodManager.SHOW_IMPLICIT)
+                    
+                    submitButton.setOnClickListener {
+                        val password = passwordEditText.text.toString()
+                        if (password.isNotEmpty()) {
+                            serviceScope.launch {
+                                try {
+                                    val isPasswordCorrect = appBlockRepository.verifyPassword(packageName, password)
+                                    
+                                    withContext(Dispatchers.Main) {
+                                        // First close dialog
+                                        try {
+                                            windowManager.removeView(view)
+                                        } catch (e: Exception) {
+                                            Log.e(TAG, "Error removing password dialog: ${e.message}")
+                                        }
+                                        
+                                        if (isPasswordCorrect) {
+                                            // Password correct, unblock the app
+                                            Toast.makeText(applicationContext, "Password correct! Unblocking app.", Toast.LENGTH_SHORT).show()
+                                            
+                                            // Update the app's status
+                                            serviceScope.launch {
+                                                // Get current app info
+                                                val currentApp = appBlockRepository.getBlockedApp(packageName)
+                                                
+                                                // Create a BlockedApp object with isActive = false
+                                                val updatedApp = BlockedAppEntity(
+                                                    packageName = packageName,
+                                                    appName = appInfo.appName,
+                                                    isActive = false,
+                                                    startTime = currentApp?.startTime,
+                                                    endTime = currentApp?.endTime,
+                                                    blockAllDay = currentApp?.blockAllDay ?: false,
+                                                    enabledDays = currentApp?.enabledDays ?: 127,
+                                                    password = currentApp?.password
+                                                )
+                                                
+                                                // Update the app's status in the database
+                                                appBlockRepository.insertBlockedApp(updatedApp)
+                                                
+                                                // Broadcast the change
+                                                val intent = Intent("com.focusguard.app.ACTION_RELOAD_BLOCKED_APPS")
+                                                applicationContext.sendBroadcast(intent)
+                                                updateBlockedAppsList(immediate = true)
+                                                
+                                                // Hide the blocking screen
+                                                hideBlockingScreen()
+                                            }
+                                        } else {
+                                            // Password incorrect
+                                            Toast.makeText(applicationContext, "Incorrect password. Please try again.", Toast.LENGTH_SHORT).show()
+                                            
+                                            // Force return to home screen
+                                            performGlobalAction(GLOBAL_ACTION_HOME)
+                                            performGlobalAction(GLOBAL_ACTION_BACK)
+                                            
+                                            // Then re-show blocking screen
+                                            showBlockingScreen(packageName)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Error verifying password: ${e.message}", e)
+                                    Toast.makeText(applicationContext, "Error verifying password: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    
+                                    // Remove view and return to home on error
+                                    try {
+                                        windowManager.removeView(view)
+                                    } catch (ex: Exception) {
+                                        Log.e(TAG, "Error removing password dialog: ${ex.message}")
+                                    }
+                                    
+                                    performGlobalAction(GLOBAL_ACTION_HOME)
+                                    showBlockingScreen(packageName)
+                                }
+                            }
+                        } else {
+                            Toast.makeText(applicationContext, "Please enter a password", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    
+                    cancelButton.setOnClickListener {
+                        try {
+                            // Remove the dialog
+                            windowManager.removeView(view)
+                            
+                            // Force return to home screen
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                            performGlobalAction(GLOBAL_ACTION_BACK)
+                            
+                            // Then show blocking screen again
+                            showBlockingScreen(packageName)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error removing password dialog: ${e.message}")
+                            
+                            // Force return to home as fallback
+                            performGlobalAction(GLOBAL_ACTION_HOME)
+                        }
                     }
                 }
-            } else {
-                Toast.makeText(applicationContext, "Please enter a password", Toast.LENGTH_SHORT).show()
-            }
-        }
-        
-        cancelButton.setOnClickListener {
-            try {
-                // Remove the dialog
-                windowManager.removeView(view)
-                
-                // Force return to home screen
-                performGlobalAction(GLOBAL_ACTION_HOME)
-                performGlobalAction(GLOBAL_ACTION_BACK)
-                
-                // Then show blocking screen again
-                showBlockingScreen(packageName)
             } catch (e: Exception) {
-                Log.e(TAG, "Error removing password dialog: ${e.message}")
-                
-                // Force return to home as fallback
-                performGlobalAction(GLOBAL_ACTION_HOME)
+                Log.e(TAG, "Error in showPasswordDialog: ${e.message}", e)
             }
         }
     }
@@ -630,39 +716,15 @@ class AppBlockerService : AccessibilityService() {
             this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE
         )
         
-        // Create a "View" button intent for the notification
-        val viewButtonIntent = PendingIntent.getActivity(
-            this, 1, notificationIntent, PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        // Create an informative notification
-        val blockedAppsCount = blockedApps.size
-        val currentlyBlocking = currentBlockedPackage?.let {
-            try {
-                packageManager.getApplicationLabel(
-                    packageManager.getApplicationInfo(it, 0)
-                ).toString()
-            } catch (e: Exception) {
-                it
-            }
-        }
-        
-        val contentText = when {
-            currentlyBlocking != null -> "Currently blocking: $currentlyBlocking"
-            blockedAppsCount > 0 -> "Monitoring $blockedAppsCount apps"
-            else -> "Service is active"
-        }
-        
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(null)
+            .setContentTitle("")
             .setContentText("")
-            .setSmallIcon(android.R.drawable.ic_lock_lock)  // Use a system icon instead
+            .setSmallIcon(R.drawable.transparent_icon)  // Use transparent icon instead of lock
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET) // Hide from lock screen
-            .setShowWhen(false) // Don""t show timestamp
+            .setShowWhen(false) // Don't show timestamp
+            .setSilent(true) // Silent notification
             .setContentIntent(pendingIntent)
-            // Add a View button to the notification
-            .addAction(android.R.drawable.ic_menu_view, "View", viewButtonIntent)
             .build()
     }
     

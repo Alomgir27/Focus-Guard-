@@ -124,6 +124,39 @@ class ApiKeyManager(private val context: Context) {
     }
     
     /**
+     * Rotate to the next API key
+     * This method alternates between primary and secondary keys,
+     * or regenerates a new key if only one is available
+     */
+    fun rotateToNextKey(): Boolean {
+        Log.d(TAG, "Rotating to next API key")
+        
+        // Get current key state
+        val isUsingMainKey = preferences.getBoolean(KEY_USING_MAIN_KEY, true)
+        val hasSecondaryKey = !preferences.getString(KEY_SECONDARY_API_KEY, "").isNullOrBlank()
+        
+        if (hasSecondaryKey) {
+            // If we have a secondary key, switch between primary and secondary
+            if (isUsingMainKey) {
+                switchToSecondaryKey()
+            } else {
+                switchToPrimaryKey()
+            }
+            
+            // Reset usage count after rotation
+            preferences.edit()
+                .putInt(KEY_USAGE_COUNT, 0)
+                .putString(KEY_LAST_ROTATION, LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .apply()
+                
+            return true
+        } else {
+            // If no secondary key, just rotate the primary key
+            return rotateApiKey()
+        }
+    }
+    
+    /**
      * Rotate the API key (this simulates rotation, in a real app you would call your backend to get a new key)
      */
     private fun rotateApiKey(): Boolean {

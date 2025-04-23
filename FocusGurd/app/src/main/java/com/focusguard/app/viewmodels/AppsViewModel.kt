@@ -108,7 +108,9 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
                 
                 // For system apps, check if we should include them
                 val isSystemApp = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                if (isSystemApp && !showSystemApps) {
+                
+                // Only filter out system apps if showSystemApps is false AND it's not a popular app
+                if (isSystemApp && !showSystemApps && !isPopularSystemApp(appInfo.packageName)) {
                     return@mapNotNull null
                 }
                 
@@ -307,5 +309,21 @@ class AppsViewModel(application: Application) : AndroidViewModel(application) {
         )
         
         return packageName in popularPackages
+    }
+    
+    private fun isPopularSystemApp(packageName: String): Boolean {
+        val popularSystemApps = listOf(
+            "com.google.android.youtube",
+            "com.android.chrome",
+            "com.google.android.apps.maps",
+            "com.google.android.gm",
+            "com.google.android.apps.photos",
+            "com.google.android.music",
+            "com.google.android.videos",
+            "com.google.android.apps.docs",
+            "com.google.android.apps.youtube.music"
+        )
+        
+        return packageName in popularSystemApps
     }
 } 

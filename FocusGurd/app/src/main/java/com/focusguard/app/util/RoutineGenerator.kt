@@ -629,7 +629,7 @@ class RoutineGenerator(
                     com.focusguard.app.api.models.Message("user", prompt)
                 ),
                 temperature = 0.7,
-                max_tokens = 1500 // Increased from 1000 to 1500 for more comprehensive routines
+                max_tokens = 1200 // Updated token limit
             )
             
             Log.d(TAG, "Sending AI request for routine generation with prompt length: ${prompt.length}")

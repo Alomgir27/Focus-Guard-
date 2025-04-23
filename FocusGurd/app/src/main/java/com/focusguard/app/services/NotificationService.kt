@@ -256,7 +256,7 @@ class NotificationService(private val context: Context) {
         val customView = RemoteViews(context.packageName, R.layout.custom_notification_layout)
         customView.setTextViewText(R.id.textViewNotificationTitle, notification.title)
         customView.setTextViewText(R.id.textViewNotificationContent, optimizedContent)
-        customView.setImageViewResource(R.id.imageViewNotificationLogo, R.drawable.logo)
+        customView.setImageViewResource(R.id.imageViewNotificationLogo, R.drawable.logo2)
         
         // Set up the View button in the custom layout to use the same pending intent
         customView.setOnClickPendingIntent(R.id.buttonViewNotification, pendingIntent)
@@ -273,6 +273,7 @@ class NotificationService(private val context: Context) {
             .setGroup(GROUP_KEY_NOTIFICATIONS)
             .setCategory(getCategoryForType(notification.type))
             .setCustomBigContentView(customView)
+            .setCustomContentView(customView) // Add a standard content view as well
             // Add a View button to the notification
             .addAction(android.R.drawable.ic_menu_view, "View", pendingIntent)
         
@@ -281,7 +282,29 @@ class NotificationService(private val context: Context) {
             builder.setSound(NotificationUtils.getNotificationSoundUri(context))
         }
         
+        // Ensure notification visibility on lock screen
+        builder.setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        
+        // Increase notification importance 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = notificationManager.getNotificationChannel(channelId)
+            if (channel != null && channel.importance < NotificationManager.IMPORTANCE_DEFAULT) {
+                channel.importance = NotificationManager.IMPORTANCE_DEFAULT
+                notificationManager.createNotificationChannel(channel)
+            }
+        }
+        
         try {
+            // Request notification permission on Android 13+ if needed
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != 
+                    android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    Log.w(TAG, "Notification permission not granted")
+                    // We can't request permission here, but we'll log it
+                }
+            }
+            
             notificationManager.notify(notificationId, builder.build())
             
             // Check if we need to show a summary notification for bundling
